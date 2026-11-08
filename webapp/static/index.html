@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System One demos</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/common.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <nav class="nav" aria-label="Demos">
+    <a href="/" aria-current="page">Overview</a>
+    <a href="/cube">Cube race</a>
+    <a href="/scam">Scam check</a>
+    <a href="/guard">Beat the guard</a>
+  </nav>
+  <div class="status" aria-live="polite">checking models…</div>
+</header>
+<main>
+  <h1>Two AI models that decide instead of write</h1>
+  <p class="lede">Chatbots like ChatGPT write an answer word by word. Jev and CLM never write anything:
+    you give them a situation and a multiple-choice question, and they return every option's probability
+    in one go, usually in well under a second. Each demo sends the exact same question to both models at the
+    same time, so you can compare answer, confidence and speed side by side.</p>
+
+  <div class="vs">
+    <section class="lane jev">
+      <div class="lane-name">Jev</div>
+      <dl>
+        <dt>Made by</dt><dd>TypeSafe AI</dd>
+        <dt>Runs</dt><dd>As a paid online service (hosted in the US)</dd>
+        <dt>Trained for</dt><dd>Honest probabilities: “80% sure” should be right 80% of the time</dd>
+        <dt>Answers</dt><dd>Choice, score, yes/no, and image boxes</dd>
+      </dl>
+    </section>
+    <section class="lane clm">
+      <div class="lane-name">CLM-8B</div>
+      <dl>
+        <dt>Made by</dt><dd>Contrastive-LM research group (open source)</dd>
+        <dt>Runs</dt><dd>On your own GPU, free to download</dd>
+        <dt>Trained for</dt><dd>Matching a situation to the best-fitting option</dd>
+        <dt>Answers</dt><dd>Choice, score and yes/no</dd>
+      </dl>
+    </section>
+  </div>
+
+  <div class="demo-list">
+    <a class="demo-link" href="/cube">
+      <h2>Cube race</h2>
+      <p>Both models play the same scrambled Rubik's cube, one move at a time. A perfect solver referees every move.</p>
+    </a>
+    <a class="demo-link" href="/scam">
+      <h2>Scam check</h2>
+      <p>Paste a Berlin flat listing. Each model checks nine red flags a careful flat-hunter would look for.</p>
+    </a>
+    <a class="demo-link" href="/guard">
+      <h2>Beat the guard</h2>
+      <p>Trick the vault bot into revealing its password. Jev, CLM and a plain keyword filter try to stop you.</p>
+    </a>
+  </div>
+
+  <p class="small muted" style="margin-top:1.5rem">Times include the network: Jev answers from the US West Coast,
+    CLM from wherever you run it. Hover over the dots in the top bar to see each model's connection status.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube race</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/common.js" defer></script>
+<script src="/static/cube.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <nav class="nav" aria-label="Demos">
+    <a href="/">Overview</a>
+    <a href="/cube" aria-current="page">Cube race</a>
+    <a href="/scam">Scam check</a>
+    <a href="/guard">Beat the guard</a>
+  </nav>
+  <div class="status" aria-live="polite">checking models…</div>
+</header>
+<main>
+  <h1>Cube race</h1>
+  <p class="lede">Every player gets the same scrambled cube. Each turn, the models see all 54 stickers and choose
+    one of the possible moves. A perfect solver checks every move: <span class="chip optimal">optimal</span> brings the cube one step closer,
+    <span class="chip neutral">neutral</span> doesn't help, <span class="chip worse">worse</span> moves it further away.</p>
+
+  <div class="modebar">
+    <div class="seg" id="mode" role="group" aria-label="Data source">
+      <button type="button" data-mode="recorded">Recorded</button>
+      <button type="button" data-mode="live">Live</button>
+    </div>
+    <label class="small muted">Replay speed
+      <select id="speed"><option value="1" selected>Real speed</option><option value="0.5">Half speed</option><option value="0.25">Quarter speed</option></select>
+    </label>
+    <span class="small muted" id="modeHint"></span>
+  </div>
+  <div class="recnote hidden" id="recNote"></div>
+
+  <div class="controls panel">
+    <div class="field">Difficulty: perfect moves needed
+      <div class="seg" id="level" role="group" aria-label="Difficulty"></div>
+    </div>
+    <div class="field">Players
+      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <label class="check"><input type="checkbox" value="jev" checked> Jev</label>
+        <label class="check"><input type="checkbox" value="clm" checked> CLM-8B</label>
+        <label class="check"><input type="checkbox" value="random" checked> Random mover</label>
+        <label class="check"><input type="checkbox" value="oracle"> Perfect solver</label>
+      </div>
+    </div>
+    <label class="check" title="Plain code that runs around the model, not AI">
+      <input type="checkbox" id="constrain" checked> Code rule: never turn the same face twice in a row
+    </label>
+    <label class="field hidden" id="recCubeField">Recorded cube
+      <select id="recCube"></select>
+    </label>
+    <div style="display:flex;gap:.5rem;margin-left:auto">
+      <button class="btn ghost" id="newCube">New cube</button>
+      <button class="btn" id="start">Start race</button>
+    </div>
+  </div>
+  <p class="small muted" id="scrambleInfo"></p>
+
+  <div class="lanes" id="lanes"></div>
+
+  <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
+    <h2 id="recSummaryTitle">All recorded cubes</h2>
+    <table class="summary-table" id="recSummary"></table>
+    <p class="small muted">This covers every recorded cube at this difficulty, not just the one on screen.
+      “New cube” picks a recorded cube at random.</p>
+  </section>
+
+  <section class="panel" style="margin-top:1rem">
+    <h2>Moves left to solve, after each turn</h2>
+    <div class="legend" id="legend"></div>
+    <svg class="chart" id="chart" viewBox="0 0 900 240" role="img" aria-label="Distance to solved per move"></svg>
+    <p class="small muted">Going down means progress. A player that reaches 0 has solved the cube.
+      Note: solving needs planning several moves ahead, which is not what these one-shot decision models are built for.
+      Watch how often they still pick an optimal move compared with the random mover.</p>
+  </section>
+</main>
+</body>
+</html>

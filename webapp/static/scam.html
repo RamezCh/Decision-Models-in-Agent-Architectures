@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scam check</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/common.js" defer></script>
+<script src="/static/scam.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <nav class="nav" aria-label="Demos">
+    <a href="/">Overview</a>
+    <a href="/cube">Cube race</a>
+    <a href="/scam" aria-current="page">Scam check</a>
+    <a href="/guard">Beat the guard</a>
+  </nav>
+  <div class="status" aria-live="polite">checking models…</div>
+</header>
+<main>
+  <h1>Is this Berlin flat a scam?</h1>
+  <p class="lede">Instead of one big “scam or not?” question, each model answers nine small yes/no questions,
+    the red flags a careful flat-hunter checks. Ordinary code then combines them into a risk score, so you can
+    see exactly why a listing was flagged.</p>
+
+  <div class="modebar">
+    <div class="seg" id="mode" role="group" aria-label="Data source">
+      <button type="button" data-mode="recorded">Recorded</button>
+      <button type="button" data-mode="live">Live</button>
+    </div>
+    <label class="small muted">Replay speed
+      <select id="speed"><option value="1" selected>Real speed</option><option value="0.5">Half speed</option><option value="0.25">Quarter speed</option></select>
+    </label>
+    <span class="small muted" id="modeHint"></span>
+  </div>
+  <div class="recnote hidden" id="recNote"></div>
+
+  <div class="two">
+    <section class="panel">
+      <h2>Listing</h2>
+      <p class="small muted" style="margin:0" id="listingHint">Pick an example (made up for this demo) or paste your own.</p>
+      <div class="examples" id="examples"></div>
+      <form id="form" class="form-grid">
+        <label class="field full">Title <input type="text" id="title"></label>
+        <label class="field">District <input type="text" id="district"></label>
+        <label class="field">Rent per month (€) <input type="number" id="rent" min="0" step="10"></label>
+        <label class="field">Size (m²) <input type="number" id="size" min="0" step="1"></label>
+        <span></span>
+        <label class="field full">Listing text and landlord messages <textarea id="text" required minlength="10"></textarea></label>
+        <div class="full" style="display:flex;gap:.6rem;align-items:center">
+          <button class="btn" type="submit" id="go">Check listing</button>
+          <span class="small muted" id="formMsg"></span>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <div class="lanes" id="verdicts"></div>
+      <section class="panel" style="margin-top:1rem">
+        <h2>Red flags, model by model</h2>
+        <table class="flag-table" id="flags">
+          <thead><tr><th scope="col">Red flag</th><th scope="col" style="color:var(--jev)">Jev</th><th scope="col" style="color:var(--clm)">CLM-8B</th></tr></thead>
+          <tbody><tr><td colspan="3" class="muted">Check a listing to see the answers.</td></tr></tbody>
+        </table>
+        <p class="small muted" id="agree"></p>
+        <div class="truth hidden" id="truth"></div>
+      </section>
+      <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
+        <h2 id="recSummaryTitle">All recorded listings</h2>
+        <table class="summary-table" id="recSummary"></table>
+        <p class="small muted">“Correct” means the decision (flagged or not) matches the example's label. This covers
+          every recorded listing, not just the one on screen. Full metrics: <code>scam-detector-demo/evaluate.py</code>.</p>
+      </section>
+    </section>
+  </div>
+</main>
+</body>
+</html>

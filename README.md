@@ -69,110 +69,100 @@ Incoming Request (Ticket / Agent State)
 
 ---
 
-## 💻 Live Benchmark Demo
+## 💻 Demos: recorded or live (real Jev and CLM calls)
 
-### Prerequisites
+Every demo sends the **identical request** to both models and shows the answer, the confidence and the measured latency side by side. Each page has a **Recorded / Live** switch:
+
+* **Recorded** (default for Cube race and Scam check): each model was recorded *on its own*, one call at a time, with the `record.py` scripts. The page replays the log at the recorded speed, so a 240 ms answer still takes 240 ms on screen. No wifi, GPU or API needed in the lecture hall.
+* **Live** (default for Beat the guard): calls the models right now. Recorded attacks are the backup if the network fails.
+
+Each demo folder has its own README with screenshots, a diagram of what happens under the hood, the exact questions the models get, and talking points for the lecture.
+
+Nothing is simulated: a recorded answer is exactly what the model returned, and an unreachable model shows its error instead of a made-up answer.
+
+| Demo | What the audience sees | Why it suits System One models |
+| :--- | :--- | :--- |
+| **[Cube race](rubric-cube-demo/README.md)** (`/cube`) | Jev, CLM, a random mover and a perfect solver play the same scrambled cube. An exact solver marks every move as optimal, neutral or worse. | One structured decision per step, 15–18 options, latency adds up per move. It also shows the limit: multi-step planning is System 2 work. |
+| **[Scam check](scam-detector-demo/README.md)** (`/scam`) | A Berlin flat listing is checked against 9 red flags; code combines them into a risk score with reasons. | Decompose into small typed questions, combine in code, route unsure cases to a human. |
+| **[Beat the guard](beat-the-guard-demo/README.md)** (`/guard`) | The audience tries to trick a chatbot into leaking a password; a keyword filter, Jev and CLM guard it. Leaderboard included. | A guardrail runs on every message, so it must be fast; fuzzy leaks (hints, translations) defeat plain code. |
+
+### Setup
 
 ```bash
-pip install numpy
+pip install -r requirements.txt
+cp .env.example .env          # add TYPESAFE_API_KEY, and CLM_BASE_URL if CLM runs elsewhere
 ```
 
-### Running the Script
+CLM runs on a GPU machine (it needs Qwen3-8B as encoder):
 
 ```bash
-python benchmark_demo.py
+pip install contrastive-lm
+vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling --max-model-len 2048 --port 8090 &
+clm-serve                     # API on http://localhost:8700
 ```
 
-### Script Source (`benchmark_demo.py`)
+Start the demo app from the repository root and open http://localhost:8000:
 
-```python
-"""
-Decision Model Prototype: Simulating Jev vs. Open-CLM-8B in Agent Workflows
-"""
-import time
-import numpy as np
+```bash
+uvicorn webapp.app:app --port 8000
+```
 
-TICKETS = [
-    {
-        "id": "TCK-101",
-        "text": "Checkout throws HTTP 500 internal server error when clicking Pay.",
-    },
-    {
-        "id": "TCK-102",
-        "text": "My credit card was charged twice for the renewal. Requesting refund.",
-    },
-    {
-        "id": "TCK-103",
-        "text": "The new dark mode theme looks clean, but can we get purple accent colors?",
-    },
-]
+The dots in the top bar show whether each model is configured and reachable.
 
-ROUTES = ["billing", "technical_support", "feature_request"]
+### Recording (do this before the lecture)
 
-def mock_jev_decide(state_text: str):
-    """Simulates Jev: Direct multi-task evaluation (~85ms latency)."""
-    start = time.perf_counter()
-    time.sleep(0.085)
-    
-    t = state_text.lower()
-    if "500" in t or "error" in t:
-        probs = {"billing": 0.03, "technical_support": 0.94, "feature_request": 0.03}
-        route = "technical_support"
-    elif "charged" in t or "refund" in t:
-        probs = {"billing": 0.95, "technical_support": 0.02, "feature_request": 0.03}
-        route = "billing"
-    else:
-        probs = {"billing": 0.08, "technical_support": 0.22, "feature_request": 0.70}
-        route = "feature_request"
+Record each model separately, ideally where it will really run. Each command writes `recordings/<demo>/<date>-<time>-<model>.jsonl`; commit that folder so the replays travel with the repo.
 
-    latency_ms = (time.perf_counter() - start) * 1000
-    return {"selected": route, "confidence": probs[route], "latency_ms": latency_ms}
+```bash
+# CLM, on the GPU machine
+cd rubric-cube-demo && python -m runner.record --players clm random oracle --levels 2 3 4 --cubes 10 --where "GPU box, BHT" && cd ..
+python scam-detector-demo/record.py  --providers clm --where "GPU box, BHT"
+python beat-the-guard-demo/record.py --providers clm --where "GPU box, BHT"
 
-def mock_clm_decide(state_text: str, cached_actions: bool = True):
-    """Simulates Open-CLM-8B: Pre-computed action embeddings + state dot-product."""
-    start = time.perf_counter()
-    time.sleep(0.016 if cached_actions else 0.075)
+# Jev, from your laptop
+cd rubric-cube-demo && python -m runner.record --players jev --levels 2 3 4 --cubes 10 --where "Laptop, Berlin" && cd ..
+python scam-detector-demo/record.py  --providers jev --where "Laptop, Berlin"
+python beat-the-guard-demo/record.py --providers jev --where "Laptop, Berlin"
+```
 
-    t = state_text.lower()
-    if "500" in t or "error" in t:
-        scores = [0.10, 0.92, 0.05]
-    elif "charged" in t or "refund" in t:
-        scores = [0.94, 0.04, 0.02]
-    else:
-        scores = [0.12, 0.25, 0.63]
+What a recording contains, per call: the full request (state and questions), the model's answers with probabilities, the model version it reported, the measured round trip and (for CLM) the server's own time. Each file starts with a session line: date, the `--where` label, and a **network ping** (a request with no model work), so the audience can see how much of Jev's time is the trip to the US. API keys are never written.
 
-    exp_scores = np.exp(scores)
-    probs = exp_scores / np.sum(exp_scores)
-    idx = int(np.argmax(probs))
+How replays stay honest:
+* Cube *k* at level *L* always has the same scramble, so models recorded on different days or machines play the same cubes.
+* The cube page shows a summary over **every** recorded cube, and "New cube" picks one at random.
+* The scam page shows correct decisions over **all** recorded listings. `evaluate.py` reads the same files, so slide numbers and replays match.
+* Every replay shows when, where and with which model version it was recorded, plus a **Raw log** link to the exact request and response.
+* Re-recording simply adds a newer file; the newest successful recording per model wins. Delete old files to drop them.
 
-    latency_ms = (time.perf_counter() - start) * 1000
-    return {"selected": ROUTES[idx], "confidence": float(probs[idx]), "latency_ms": latency_ms}
+### Rehearsing without a GPU or a Jev key
 
-def run_benchmark():
-    print("=" * 70)
-    print("SYSTEM 1 DECISION ENGINE BENCHMARK (Jev vs. Open-CLM-8B)")
-    print("=" * 70)
-    CONFIDENCE_THRESHOLD = 0.75
+`tools/mock_system_one_server.py` speaks the same API with keyword rules and noise. Its answers are labelled `mock-jev` / `mock-clm` in the UI, so it can't be confused with the real models. **Never present mock numbers as results**, and don't record against the mock into the real `recordings/` folder (set `SYSTEM_ONE_RECORDINGS=/tmp/mock-rec` while rehearsing).
 
-    for item in TICKETS:
-        print(f"\n[Payload {item['id']}]: \"{item['text']}\"")
-        
-        # 1. Jev
-        jev = mock_jev_decide(item["text"])
-        print(f"  • Typesafe Jev    -> Action: {jev['selected']:<18} | Conf: {jev['confidence']:.2f} | Latency: {jev['latency_ms']:.1f}ms")
-        
-        # 2. CLM-8B
-        clm = mock_clm_decide(item["text"], cached_actions=True)
-        print(f"  • Open-CLM-8B     -> Action: {clm['selected']:<18} | Conf: {clm['confidence']:.2f} | Latency: {clm['latency_ms']:.1f}ms (Cached)")
+```bash
+python tools/mock_system_one_server.py --port 8700 --name clm --latency-ms 40 &
+python tools/mock_system_one_server.py --port 8701 --name jev --latency-ms 120 &
+# in .env: CLM_BASE_URL=http://127.0.0.1:8700  TYPESAFE_BASE_URL=http://127.0.0.1:8701  TYPESAFE_API_KEY=mock
+```
 
-        # 3. Guardrail / Escalation
-        if jev["confidence"] < CONFIDENCE_THRESHOLD:
-            print("    ↳ [Gatekeeper]: Low confidence (< 0.75). Escalating to System 2 LLM.")
-        else:
-            print(f"    ↳ [Gatekeeper]: High confidence. Fast-dispatched directly to [{jev['selected']}].")
+### Command-line tools (for the data science part)
 
-if __name__ == "__main__":
-    run_benchmark()
+```bash
+cd rubric-cube-demo && python -m runner.race --level 3        # live cube race in the terminal
+python scam-detector-demo/evaluate.py                           # from the recordings: AUC, Brier score, calibration,
+                                                                # latency percentiles, logistic regression (LOO CV)
+python -m pytest tests rubric-cube-demo/tests                   # 23 tests, run against the mock server
+```
+
+### Repository layout
+
+```text
+system_one/            one client for both models (same wire format: POST /v1/systemone) + recorder
+recordings/            recorded calls, replayed by the web app (created by the record.py scripts)
+rubric-cube-demo/      README + screenshots; cube engine (moves derived from 3D geometry), exact solver, players, CLI race
+scam-detector-demo/    README + screenshots; red flags + combining logic, 30 labelled synthetic listings, evaluate.py
+beat-the-guard-demo/   README + screenshots; vault bot (scripted, or any OpenAI-compatible LLM), guards, leaderboard
+webapp/                the web pages for all three demos: FastAPI app + static pages (no build step, no CDN: works offline in the lecture hall)
+tools/                 mock server for rehearsals
 ```
 
 ---

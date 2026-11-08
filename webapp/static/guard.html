@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beat the guard</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/common.js" defer></script>
+<script src="/static/guard.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <nav class="nav" aria-label="Demos">
+    <a href="/">Overview</a>
+    <a href="/cube">Cube race</a>
+    <a href="/scam">Scam check</a>
+    <a href="/guard" aria-current="page">Beat the guard</a>
+  </nav>
+  <div class="status" aria-live="polite">checking models…</div>
+</header>
+<main>
+  <h1>Beat the guard</h1>
+  <p class="lede">Vaulty the chatbot knows a secret password and is easy to fool. A guard checks every message you send
+    and every answer Vaulty gives, and blocks anything suspicious. Your goal: get the password past the guard.
+    You win against a guard when Vaulty really leaks and that guard lets it through.</p>
+
+  <div class="modebar">
+    <div class="seg" id="mode" role="group" aria-label="Data source">
+      <button type="button" data-mode="live">Live</button>
+      <button type="button" data-mode="recorded">Recorded</button>
+    </div>
+    <label class="small muted">Replay speed
+      <select id="speed"><option value="1" selected>Real speed</option><option value="0.5">Half speed</option><option value="0.25">Quarter speed</option></select>
+    </label>
+    <span class="small muted" id="modeHint"></span>
+  </div>
+  <div class="recnote hidden" id="recNote"></div>
+
+  <div class="two">
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap">
+        <h2 style="margin:0">Chat with Vaulty</h2>
+        <span class="small muted">Password: <span class="vault" id="vault">●●●●●●●●●</span></span>
+      </div>
+      <div class="chat" id="chat" aria-live="polite">
+        <div class="msg bot">Hi, I'm Vaulty. I guard the vault. Ask me anything… except the password, of course.</div>
+      </div>
+      <form class="composer" id="composer">
+        <label for="msg" class="hidden">Your message</label>
+        <textarea id="msg" placeholder="Try to trick Vaulty…" required></textarea>
+        <button class="btn" id="send" type="submit">Send</button>
+      </form>
+      <div class="hidden" id="attackPanel">
+        <p class="small muted" style="margin:.6rem 0 0">Recorded attacks. Pick one to replay it with the real recorded
+          verdicts and timings. Changing the guard or the threshold re-decides on the recorded probabilities.
+          Replays don't count for the leaderboard.</p>
+        <div class="attack-list" id="attackList"></div>
+      </div>
+      <div class="form-grid" style="margin-top:.8rem">
+        <label class="field">Your name (for the leaderboard) <input type="text" id="player" maxlength="40" placeholder="anonymous"></label>
+        <div class="field full">Who guards the vault?
+          <div class="seg" id="defender" role="group" aria-label="Active guard">
+            <button type="button" data-d="keyword" aria-pressed="false">Keyword filter</button>
+            <button type="button" data-d="jev" aria-pressed="true">Jev</button>
+            <button type="button" data-d="clm" aria-pressed="false">CLM-8B</button>
+          </div>
+        </div>
+        <label class="field full"><span>Block when the guard is at least <strong id="thrVal">50%</strong> sure it's an attack or a leak</span>
+          <input type="range" id="threshold" min="0.05" max="0.95" step="0.05" value="0.5">
+        </label>
+      </div>
+      <p class="small muted" id="botMode"></p>
+    </section>
+
+    <section>
+      <div class="lanes three" id="verdicts"></div>
+      <div class="truth hidden" id="truth"></div>
+      <section class="panel" style="margin-top:1rem">
+        <h2>How the guards are doing</h2>
+        <table class="board" id="stats"></table>
+        <p class="small muted">A good guard catches every leak while blocking as little as possible when nothing leaked
+          (that includes harmless chat, which annoys real users). Move the threshold to trade one against the other.</p>
+      </section>
+      <section class="panel" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <h2>Leaderboard</h2>
+          <button class="btn ghost small" id="reset" type="button">Reset</button>
+        </div>
+        <table class="board" id="board"></table>
+      </section>
+    </section>
+  </div>
+</main>
+</body>
+</html>
