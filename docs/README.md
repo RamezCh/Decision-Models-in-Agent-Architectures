@@ -2,6 +2,8 @@
 
 This page explains what happens between "send the listing" and "Likely scam". It covers the theory behind System One models (Jev and CLM-8B), how CLM-8B turns text into a probability, and why the way you write a question changes the answer. It also covers what we measured on our own demos with the real model on the BHT cluster.
 
+> Looking for who else builds decision models now (Google, Perplexity, AWS, OpenAI, vLLM Semantic Router)? See the [landscape update, Nov 2026](landscape-update-2026-11.md).
+
 1. [System 1 vs System 2](#1-system-1-vs-system-2)
 2. [What you send and what comes back](#2-what-you-send-and-what-comes-back)
 3. [How CLM-8B computes an answer](#3-how-clm-8b-computes-an-answer)
