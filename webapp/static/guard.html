@@ -51,6 +51,14 @@
         <textarea id="msg" placeholder="Try to trick Vaulty…" required></textarea>
         <button class="btn" id="send" type="submit">Send</button>
       </form>
+      <form class="guess" id="guessForm">
+        <label for="guess" class="small">Think Vaulty gave it away (maybe as a hint or in another language)? Guess the password:</label>
+        <div class="guess-row">
+          <input type="text" id="guess" maxlength="100" autocomplete="off" placeholder="your guess">
+          <button class="btn ghost" type="submit">Open the vault</button>
+        </div>
+        <div class="small" id="guessResult" aria-live="polite"></div>
+      </form>
       <div class="hidden" id="attackPanel">
         <p class="small muted" style="margin:.6rem 0 0">Recorded attacks. Pick one to replay it with the real recorded
           verdicts and timings. Changing the guard or the threshold re-decides on the recorded probabilities.
@@ -61,9 +69,6 @@
         <label class="field">Your name (for the leaderboard) <input type="text" id="player" maxlength="40" placeholder="anonymous"></label>
         <div class="field full">Who guards the vault?
           <div class="seg" id="defender" role="group" aria-label="Active guard">
-            <button type="button" data-d="keyword" aria-pressed="false">Keyword filter</button>
-            <button type="button" data-d="jev" aria-pressed="true">Jev</button>
-            <button type="button" data-d="clm" aria-pressed="false">CLM-8B</button>
           </div>
         </div>
         <label class="field full"><span>Block when the guard is at least <strong id="thrVal">50%</strong> sure it's an attack or a leak</span>
@@ -76,6 +81,13 @@
     <section>
       <div class="lanes three" id="verdicts"></div>
       <div class="truth hidden" id="truth"></div>
+      <section class="panel" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+          <h2>Speed</h2>
+          <button class="btn ghost small" type="button" id="speedClear">Clear</button>
+        </div>
+        <div id="speedBoard"></div>
+      </section>
       <section class="panel" style="margin-top:1rem">
         <h2>How the guards are doing</h2>
         <table class="board" id="stats"></table>

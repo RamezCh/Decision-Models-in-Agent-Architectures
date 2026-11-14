@@ -4,8 +4,9 @@ record.py: record both models' answers for every example listing, for replay and
 Each model is recorded on its own, one listing at a time (never in parallel), so
 latencies are clean. Run from the repository root:
 
-    python scam-detector-demo/record.py --providers clm --where "GPU box, BHT"
-    python scam-detector-demo/record.py --providers jev --where "Laptop, Berlin"
+    python scam-detector-demo/record.py --where "BHT cluster (V100)"
+
+By default it records the demo's models (CLM only; see SCAM_MODELS in .env).
 
 Output: recordings/scam/<date>-<time>-<provider>.jsonl
 Then: the web app replays them (Scam check, "Recorded"), and evaluate.py computes
@@ -23,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from scam.detector import listing_hash, listing_state, load_examples, questions  # noqa: E402
+from scam.detector import MODELS, QUESTIONS_VERSION, listing_hash, listing_state, load_examples, questions  # noqa: E402
 from system_one import SystemOneClient  # noqa: E402
 from system_one.recordings import Recorder  # noqa: E402
 
@@ -43,7 +44,8 @@ async def record(provider: str, args, client: SystemOneClient):
         state, qs = listing_state(listing), questions()
         res = await client.ask(provider, state, qs)
         rec.call({"state": state, "questions": qs}, res,
-                 {"listing_id": listing["id"], "text_sha": listing_hash(listing)})
+                 {"listing_id": listing["id"], "text_sha": listing_hash(listing),
+                  "questions_version": QUESTIONS_VERSION})
         status = f"{res.latency_ms:6.0f} ms" if res.ok else f"ERROR {res.error}"
         print(f"  {i:2d}/{len(listings)} {listing['id']}: {status}")
         failures += not res.ok
@@ -63,7 +65,7 @@ async def main_async(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Record scam-detector answers for replay")
-    ap.add_argument("--providers", nargs="+", default=["jev", "clm"], choices=["jev", "clm"])
+    ap.add_argument("--providers", nargs="+", default=MODELS, choices=["jev", "clm"])
     ap.add_argument("--only", nargs="+", help="only these listing ids")
     ap.add_argument("--where", help='shown in the replay, e.g. "Laptop, Berlin"')
     ap.add_argument("--note")

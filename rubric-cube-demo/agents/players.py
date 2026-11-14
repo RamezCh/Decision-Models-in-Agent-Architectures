@@ -42,11 +42,24 @@ def move_description(move: str, state: list) -> str:
     return f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {_TURN[move[1:]]}"
 
 
-def legal_moves(last_move: str | None, constrain: bool = True) -> list[str]:
-    """Code-side rule: never turn the same face twice in a row (it is always wasteful)."""
-    if not constrain or not last_move:
-        return list(ALL_MOVES)
-    return [m for m in ALL_MOVES if m[0] != last_move[0]]
+def legal_moves(last_move: str | None, constrain: bool = True, state: list | None = None,
+                visited: set | None = None) -> list[str]:
+    """The code-side rules around the model (the model only chooses among what is left):
+
+    * constrain: never turn the same face twice in a row (it is always wasteful)
+    * visited:   never return to a position this player was already in. A model that
+                 always takes its favourite move otherwise loops forever (e.g. U2, R2,
+                 U2, R2...). If every move would revisit, the rule is dropped for that turn.
+    """
+    moves = list(ALL_MOVES) if not constrain or not last_move else [m for m in ALL_MOVES if m[0] != last_move[0]]
+    if visited and state is not None:
+        fresh = [m for m in moves if state_key(apply_move(state, m)) not in visited]
+        moves = fresh or moves
+    return moves
+
+
+def state_key(state: list) -> bytes:
+    return bytes(state)
 
 
 def state_text(state: list, last_move: str | None) -> str:
@@ -74,9 +87,10 @@ def cube_question(state: list, moves: list[str]) -> dict:
 
 
 async def decide(player: str, state: list, last_move: str | None, client=None,
-                 constrain: bool = True, rng: random.Random | None = None) -> dict[str, Any]:
+                 constrain: bool = True, rng: random.Random | None = None,
+                 visited: set | None = None) -> dict[str, Any]:
     """One decision. Everything returned is JSON-serializable (it is logged and sent to the browser)."""
-    moves = legal_moves(last_move, constrain)
+    moves = legal_moves(last_move, constrain, state, visited)
     base = {"request": None, "answers": None, "model": None, "server_ms": None, "error": None}
 
     if player == "random":
@@ -113,9 +127,10 @@ async def decide(player: str, state: list, last_move: str | None, client=None,
     }
 
 
-def judge(state: list, move: str, last_move: str | None, constrain: bool = True) -> dict:
+def judge(state: list, move: str, last_move: str | None, constrain: bool = True,
+          visited: set | None = None) -> dict:
     """The referee: exact distance before/after and whether the move was optimal."""
-    ev = evaluate_moves(state, legal_moves(last_move, constrain))
+    ev = evaluate_moves(state, legal_moves(last_move, constrain, state, visited))
     d, d_after = ev["distance"], ev["after"][move]
     if move in ev["optimal"]:
         verdict = "optimal"
@@ -128,14 +143,15 @@ def judge(state: list, move: str, last_move: str | None, constrain: bool = True)
 
 async def play(player: str, initial_state: list, client=None, max_steps: int = 20, constrain: bool = True,
                rng: random.Random | None = None,
-               on_step: Callable[[dict, dict], Any] | None = None) -> dict:
+               on_step: Callable[[dict, dict], Any] | None = None, no_repeat: bool = True) -> dict:
     """Play one game until solved, max_steps, or an error. Calls on_step(step_record, decision)."""
     state, last = initial_state[:], None
+    visited = {state_key(state)} if no_repeat else None
     steps: list[dict] = []
     for step in range(1, max_steps + 1):
         if is_solved(state):
             break
-        res = await decide(player, state, last, client, constrain, rng)
+        res = await decide(player, state, last, client, constrain, rng, visited)
         rec = {"step": step, "state_before": state, "last_move": last, "ok": res["ok"],
                "latency_ms": round(res["latency_ms"], 2), "server_ms": res["server_ms"],
                "model": res["model"], "error": res["error"]}
@@ -147,11 +163,13 @@ async def play(player: str, initial_state: list, client=None, max_steps: int = 2
         new_state = apply_move(state, res["move"])
         rec.update(move=res["move"], confidence=res["confidence"], probabilities=res["probabilities"],
                    state_after=new_state, solved=is_solved(new_state),
-                   **judge(state, res["move"], last, constrain))
+                   **judge(state, res["move"], last, constrain, visited))
         steps.append(rec)
         if on_step:
             on_step(rec, res)
         state, last = new_state, res["move"]
+        if visited is not None:
+            visited.add(state_key(state))
 
     moves = [s for s in steps if s["ok"]]
     return {

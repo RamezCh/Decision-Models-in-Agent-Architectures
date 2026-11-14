@@ -1,20 +1,20 @@
 """
-record.py: record how Jev and CLM judge a fixed set of attacks, as a backup for the live game.
+record.py: record CLM's message check on the labelled messages, for calibration and as a backup.
 
-Beat the Guard is meant to be played live by the audience. This recording is the
-safety net: if the network dies, the page can replay these attacks with the
-real recorded verdicts and timings. Run from the repository root:
+Two uses:
+  * calibration: tools/calibrate.py fits CLM's raw "is this an attack?" scores to
+    the labels in data/attacks.jsonl (13 attacks, 12 harmless messages)
+  * backup: if the network fails during the live game, the page replays these
+    messages with the real recorded verdicts and timings
 
-    python beat-the-guard-demo/record.py --providers clm --where "GPU box, BHT"
-    python beat-the-guard-demo/record.py --providers jev --where "Laptop, Berlin"
+Run from the repository root, with the tunnel to CLM open:
 
-For each attack: the vault bot answers once, then each model makes its two checks
-(input, then output) one call at a time. With the default scripted bot the
-replies are deterministic, so recordings from different machines line up. With
-an LLM bot, each recording stores the reply it judged, and the replay shows
-which reply that was.
+    python beat-the-guard-demo/record.py --where "BHT cluster (A100)"
 
-Attacks live in beat-the-guard-demo/data/attacks.jsonl; add your own.
+For each message: the vault bot answers, then the model makes its message check
+(one call). The answer check is plain code, so it needs no recording. With the
+default scripted bot the replies are deterministic, so recordings line up.
+
 Output: recordings/guard/<date>-<time>-<provider>.jsonl
 """
 
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 from pathlib import Path
 
@@ -30,17 +29,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from guard.game import INPUT_QUESTIONS, OUTPUT_QUESTIONS, output_state  # noqa: E402
+from guard.game import INPUT_QUESTIONS, MODELS, QUESTIONS_VERSION, load_attacks  # noqa: E402
 from guard.vault_bot import VaultBot  # noqa: E402
 from system_one import SystemOneClient  # noqa: E402
 from system_one.recordings import Recorder  # noqa: E402
-
-ATTACKS = HERE / "data" / "attacks.jsonl"
-
-
-def load_attacks() -> list[dict]:
-    with open(ATTACKS, encoding="utf-8") as fh:
-        return [json.loads(line) for line in fh if line.strip()]
 
 
 async def record(provider: str, args, client: SystemOneClient, bot: VaultBot):
@@ -49,22 +41,20 @@ async def record(provider: str, args, client: SystemOneClient, bot: VaultBot):
     rec = Recorder("guard", provider, where=args.where, note=args.note)
     ping = await client.ping(provider)
     rec.start({"label": p.label, "base_url": p.base_url, "model_requested": p.model}, ping,
-              bot_mode=bot.mode, attacks=len(attacks))
+              bot_mode=bot.mode, attacks=len(attacks), questions_version=QUESTIONS_VERSION)
     print(f"{p.label} -> {rec.path}\n  network ping (no model work): {ping.get('median_ms')} ms")
     for a in attacks:
         reply = await bot.reply(a["text"])
-        ctx = {"attack_id": a["id"], "text": a["text"], "bot_reply": reply["reply"],
-               "leaked": reply["leaked"], "how": reply["how"], "bot_mode": bot.mode}
-        r_in = await client.ask(provider, a["text"], INPUT_QUESTIONS)
-        rec.call({"state": a["text"], "questions": INPUT_QUESTIONS}, r_in, {**ctx, "check": "input"})
-        r_out = await client.ask(provider, output_state(reply["reply"]), OUTPUT_QUESTIONS)
-        rec.call({"state": output_state(reply["reply"]), "questions": OUTPUT_QUESTIONS}, r_out,
-                 {**ctx, "check": "output"})
-        if r_in.ok and r_out.ok:
-            print(f"  {a['id']}: attack {r_in.answers['attack'].value:.2f}, leak {r_out.answers['leak'].value:.2f}, "
-                  f"{r_in.latency_ms + r_out.latency_ms:.0f} ms")
+        res = await client.ask(provider, a["text"], INPUT_QUESTIONS)
+        rec.call({"state": a["text"], "questions": INPUT_QUESTIONS}, res,
+                 {"attack_id": a["id"], "text": a["text"], "is_attack": a["attack"], "bot_reply": reply["reply"],
+                  "leaked": reply["leaked"], "how": reply["how"], "bot_mode": bot.mode,
+                  "questions_version": QUESTIONS_VERSION})
+        label = "attack  " if a["attack"] else "harmless"
+        if res.ok:
+            print(f"  {a['id']} {label} raw score {res.answers['attack'].value:.4f}  {res.latency_ms:.0f} ms")
         else:
-            print(f"  {a['id']}: ERROR {r_in.error or r_out.error}")
+            print(f"  {a['id']} ERROR {res.error}")
 
 
 async def main_async(args):
@@ -78,9 +68,9 @@ async def main_async(args):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Record guard verdicts for a fixed set of attacks")
-    ap.add_argument("--providers", nargs="+", default=["jev", "clm"], choices=["jev", "clm"])
-    ap.add_argument("--where", help='shown in the replay, e.g. "Laptop, Berlin"')
+    ap = argparse.ArgumentParser(description="Record the guard's message check on the labelled messages")
+    ap.add_argument("--providers", nargs="+", default=MODELS, choices=["jev", "clm"])
+    ap.add_argument("--where", help='shown in the replay, e.g. "BHT cluster (A100)"')
     ap.add_argument("--note")
     asyncio.run(main_async(ap.parse_args()))
 

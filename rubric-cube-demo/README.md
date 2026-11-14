@@ -6,6 +6,9 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 
 <sub>Screenshot from a rehearsal with the mock server (model names `mock-jev` / `mock-clm`), so the numbers are not real results.</sub>
 
+
+> Why the models struggle here, with the measurement behind it: [docs/README.md, section 8](../docs/README.md#8-where-it-breaks-the-guard-and-the-cube). Every move is also listed in the page's **decision log** (player, move, probability, top alternatives, the solver's verdict, time), downloadable as CSV.
+
 ## What the audience sees
 
 * **One lane per player**, always in the same colour: Jev indigo, CLM teal, random grey, perfect solver gold.

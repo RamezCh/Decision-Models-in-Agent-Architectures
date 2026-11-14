@@ -41,7 +41,8 @@ async def record_player(name: str, args, client) -> str:
         p = client.providers[name]
         info = {"label": p.label, "base_url": p.base_url, "model_requested": p.model}
         ping = await client.ping(name)
-    rec.start(info, ping, constrain=not args.allow_same_face, max_steps_rule="3 * level + 4")
+    rec.start(info, ping, constrain=not args.allow_same_face, no_repeat=not args.allow_repeats,
+              max_steps=args.max_steps)
     print(f"\n{PLAYERS[name]} -> {rec.path}")
     if ping:
         print(f"  network ping (no model work): {ping.get('median_ms')} ms")
@@ -50,7 +51,7 @@ async def record_player(name: str, args, client) -> str:
         for k in range(args.cubes):
             seed = args.first_seed + k
             state, scramble = scramble_exact(level, seed=seed)
-            max_steps = 3 * level + 4
+            max_steps = args.max_steps
             rec.event("run_start", level=level, seed=seed, initial_state=state, scramble=scramble,
                       max_steps=max_steps)
 
@@ -62,7 +63,7 @@ async def record_player(name: str, args, client) -> str:
                 rec.call(decision["request"], None, context, **fields)
 
             result = await play(name, state, client, max_steps, not args.allow_same_face,
-                                random.Random(seed), log_step)
+                                random.Random(seed), log_step, no_repeat=not args.allow_repeats)
             rec.event("run_end", level=level, seed=seed, solved=result["solved"], moves=result["moves"],
                       optimal_rate=result["optimal_rate"], final_distance=result["final_distance"],
                       error=result["error"])
@@ -98,6 +99,10 @@ def main():
     ap.add_argument("--where", help='shown in the replay, e.g. "Laptop, Berlin" or "GPU box, BHT"')
     ap.add_argument("--note", help="free text stored with the recording")
     ap.add_argument("--allow-same-face", action="store_true")
+    ap.add_argument("--max-steps", type=int, default=60,
+                    help="moves allowed per cube before giving up (default 60)")
+    ap.add_argument("--allow-repeats", action="store_true",
+                    help="let players return to a position they were already in (off by default: it causes loops)")
     ap.add_argument("--keep-going", dest="stop_on_error", action="store_false",
                     help="continue with the next cube after a failed call")
     asyncio.run(main_async(ap.parse_args()))

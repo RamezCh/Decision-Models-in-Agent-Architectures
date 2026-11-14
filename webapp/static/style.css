@@ -197,6 +197,27 @@ input[type=range] { width: 100%; accent-color: var(--ink); }
 .vs dt { color: var(--muted); }
 .vs dd { margin: 0; }
 
+.flag-table .push { font-size: .75rem; color: var(--muted); margin-top: .1rem; font-variant-numeric: tabular-nums; }
+.flag-table .push.up { color: var(--bad); }
+.flag-table .push.down { color: var(--good); }
+
+/* ── speed panel ────────────────────────────────────── */
+.watch.flash .num { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { background: color-mix(in srgb, var(--lane, var(--ink)) 22%, transparent); } 100% { background: transparent; } }
+.speed-row { padding: .4rem 0 .8rem; border-bottom: 1px solid var(--line); }
+.speed-row:last-child { border-bottom: 0; }
+.speed-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.speed-avg { font-family: var(--display); color: var(--c); font-variant-numeric: tabular-nums; }
+.speed-avg .num { font-size: 2.2rem; font-weight: 600; }
+.speed-avg .unit { color: var(--muted); font-size: .95rem; }
+.speed-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: .4rem; margin: .3rem 0 .5rem; }
+.speed-stat .v { font-family: var(--display); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.speed-stat .k { font-size: .75rem; color: var(--muted); }
+.speed-split { position: relative; height: 1.3rem; background: var(--paper); border-radius: 4px; overflow: hidden; margin-bottom: .5rem; }
+.speed-split .seg-model { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--c) 45%, transparent); }
+.speed-split span { position: relative; padding-left: .5rem; line-height: 1.3rem; }
+.speed-spark svg { width: 100%; height: auto; max-height: 150px; display: block; }
+
 /* ── recorded / live ────────────────────────────────── */
 .modebar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.2rem; margin-bottom: .8rem; }
 .modebar .seg button { font-weight: 600; }
@@ -222,3 +243,27 @@ input[type=range] { width: 100%; accent-color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* decision log */
+.log-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.log-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.log-table th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 600;
+  color: var(--muted); padding: .45rem .6rem; border-bottom: 1px solid var(--line); z-index: 1; }
+.log-table td { padding: .4rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.log-table td.num, .log-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.log-table tr.log-new td { animation: lognew 1.2s ease-out; }
+@keyframes lognew { from { background: color-mix(in srgb, #eda100 22%, transparent); } to { background: transparent; } }
+.log-table .opts strong { font-weight: 650; }
+.log-table .chip { margin: 0; white-space: nowrap; }
+.log-table .who { font-weight: 600; white-space: nowrap; }
+.log-table td.msgcol { min-width: 13rem; max-width: 24rem; }
+.log-table tr.active-guard td { background: color-mix(in srgb, var(--clm) 6%, transparent); }
+.log-table td.widecol { min-width: 15rem; }
+
+/* guess the password */
+.guess { margin-top: .8rem; display: flex; flex-direction: column; gap: .35rem; }
+.guess-row { display: flex; gap: .5rem; }
+.guess-row input { flex: 1; }
+.guess-ok { color: var(--good); font-weight: 600; }
+.guess-no { color: var(--muted); }
+.vault.open { color: var(--good); font-weight: 700; letter-spacing: .08em; }

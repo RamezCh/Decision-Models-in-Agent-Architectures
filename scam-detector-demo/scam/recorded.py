@@ -15,7 +15,7 @@ import statistics
 
 from system_one.recordings import load_sessions, session_meta
 
-from .detector import OVERALL, RED_FLAGS, assemble, combine, listing_hash, load_examples, model_entry
+from .detector import MODELS, OVERALL, QUESTIONS_VERSION, assemble, combine, listing_hash, load_examples, model_entry
 
 
 def latest_calls() -> dict[str, dict[str, dict]]:
@@ -29,6 +29,10 @@ def latest_calls() -> dict[str, dict[str, dict]]:
             lid = ctx.get("listing_id")
             if lid not in current or ctx.get("text_sha") != current[lid]:
                 continue
+            if ctx.get("questions_version") != QUESTIONS_VERSION:
+                continue  # recorded with different questions: not comparable
+            if call["provider"] not in MODELS:
+                continue  # e.g. an old Jev recording while the demo is set to CLM only
             slot = out.setdefault(call["provider"], {})
             if call.get("ok") or lid not in slot:
                 slot[lid] = {"call": call, "meta": meta}
@@ -41,13 +45,13 @@ def _probs(call: dict) -> dict[str, float]:
 
 def _entry(call: dict) -> dict:
     return model_entry(bool(call.get("ok")), _probs(call), call.get("latency_ms", 0.0),
-                       call.get("server_ms"), call.get("model"), call.get("error"))
+                       call.get("server_ms"), call.get("model"), call.get("error"), provider=call.get("provider"))
 
 
 def replay_listing(listing_id: str) -> dict | None:
     calls = latest_calls()
     models, recorded = {}, {}
-    for prov in ("jev", "clm"):
+    for prov in MODELS:
         hit = calls.get(prov, {}).get(listing_id)
         if hit:
             models[prov] = _entry(hit["call"])
@@ -73,7 +77,7 @@ def catalog() -> dict:
         ok = [(lid, h["call"]) for lid, h in by_id.items() if h["call"].get("ok")]
         correct = 0
         for lid, call in ok:
-            flagged = combine({f["id"]: _probs(call)[f["id"]] for f in RED_FLAGS})["decision"] != "ok"
+            flagged = combine(_probs(call), prov)["decision"] != "ok"
             correct += flagged == (examples[lid]["label"] == "scam")
         lat = sorted(c.get("latency_ms", 0.0) for _, c in ok)
         summary[prov] = {
@@ -86,4 +90,4 @@ def catalog() -> dict:
     listings = [{"id": lid, "providers": sorted(p for p in calls if lid in calls[p])} for lid in examples]
     return {"listings": [x for x in listings if x["providers"]], "summary": summary,
             "sessions": sorted(sessions.values(), key=lambda m: m["recorded_at"] or ""),
-            "overall_id": OVERALL["id"]}
+            "overall_id": OVERALL["id"], "models": MODELS}

@@ -104,15 +104,17 @@ def answer_score(state, q, name) -> dict:
             "probabilities": {str(i): p for i, p in enumerate(probs)}}
 
 
-def create_app(name: str, latency_ms: float) -> FastAPI:
+def create_app(name: str, latency_ms: float, api_key: str | None = None) -> FastAPI:
     app = FastAPI()
 
     @app.get("/health")
-    def health():
-        return {"ok": True, "mock": True}
+    def health():   # same fields as clm-serve's /health
+        return {"ok": True, "mock": True, "embedder": True, "models": [f"mock-{name}"]}
 
     @app.post("/v1/systemone")
     async def systemone(request: Request):
+        if api_key and request.headers.get("authorization") != f"Bearer {api_key}":
+            return JSONResponse({"detail": "invalid API key"}, status_code=401)
         t0 = time.perf_counter()
         body = await request.json()
         await asyncio.sleep(max(0.0, random.gauss(latency_ms, latency_ms * 0.15)) / 1000)
@@ -130,5 +132,6 @@ if __name__ == "__main__":
     ap.add_argument("--port", type=int, default=8700)
     ap.add_argument("--name", default="clm")
     ap.add_argument("--latency-ms", type=float, default=50)
+    ap.add_argument("--api-key", help="require this Bearer key, like clm-serve with CLM_API_KEY")
     a = ap.parse_args()
-    uvicorn.run(create_app(a.name, a.latency_ms), host="127.0.0.1", port=a.port, log_level="warning")
+    uvicorn.run(create_app(a.name, a.latency_ms, a.api_key), host="127.0.0.1", port=a.port, log_level="warning")

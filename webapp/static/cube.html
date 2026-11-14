@@ -49,8 +49,21 @@
         <label class="check"><input type="checkbox" value="oracle"> Perfect solver</label>
       </div>
     </div>
-    <label class="check" title="Plain code that runs around the model, not AI">
-      <input type="checkbox" id="constrain" checked> Code rule: never turn the same face twice in a row
+    <div class="field">Code rules around the model (plain code, not AI)
+      <label class="check"><input type="checkbox" id="constrain" checked> Never turn the same face twice in a row</label>
+      <label class="check" title="Without this, a model that always takes its favourite move can loop forever, e.g. U2, R2, U2, R2">
+        <input type="checkbox" id="noRepeat" checked> Never go back to a position it was already in</label>
+    </div>
+    <label class="field">Moves allowed
+      <select id="moveLimit">
+        <option value="auto">3 × difficulty + 4</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="0" selected>No limit (until solved or stopped)</option>
+      </select>
+    </label>
+    <label class="field">Pause after each move
+      <select id="pace"><option value="450">Short (0.5 s)</option><option value="1200" selected>Normal (1.2 s)</option><option value="2500">Long (2.5 s)</option></select>
     </label>
     <label class="field hidden" id="recCubeField">Recorded cube
       <select id="recCube"></select>
@@ -63,6 +76,14 @@
   <p class="small muted" id="scrambleInfo"></p>
 
   <div class="lanes" id="lanes"></div>
+
+  <section class="panel" style="margin-top:1rem">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+      <h2>Speed</h2>
+      <button class="btn ghost small" type="button" id="speedClear">Clear</button>
+    </div>
+    <div id="speedBoard"></div>
+  </section>
 
   <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
     <h2 id="recSummaryTitle">All recorded cubes</h2>

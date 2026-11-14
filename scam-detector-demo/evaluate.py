@@ -1,8 +1,7 @@
 """
-Offline evaluation of the scam detector: Jev vs CLM on the labelled listings.
+Offline evaluation of the scam detector on the labelled listings (CLM by default; SCAM_MODELS to compare).
 
-    python scam-detector-demo/record.py --providers clm     (first: record each model)
-    python scam-detector-demo/record.py --providers jev
+    python scam-detector-demo/record.py                      (first: record the demo's models)
     python scam-detector-demo/evaluate.py                    (then: metrics, from the repository root)
 
 It makes NO model calls itself: it reads the recordings in recordings/scam/, the
@@ -14,12 +13,12 @@ Writes to scam-detector-demo/results/:
   report.md                 the comparison table, calibration bins and fitted weights
 
 What it measures, per model:
-  * AUC of the checklist risk and of the one big question (ranking quality, 1.0 = perfect)
-  * Brier score of the one big question (lower is better; measures calibration + accuracy)
+  * AUC (ranking quality, 1.0 = perfect) and Brier score (lower is better),
+    raw vs calibrated. Calibrated numbers are leave-one-out: each listing is
+    scored by a calibration that never saw it, so they are not flattered.
   * accuracy/precision/recall when "check" or "warn" counts as flagged
+  * reliability tables (predicted vs actual scam rate) and the calibration weights
   * median and 95th-percentile latency
-  * a logistic regression on the 9 flag probabilities, with leave-one-out
-    cross-validation, as a learned alternative to the hand-set weights
 
 Note: the dataset is small (30 synthetic listings), so treat the numbers as a
 classroom illustration, not a benchmark. Add real listings to data/listings.jsonl.
@@ -38,7 +37,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from scam.detector import CHECK_AT, RED_FLAGS, combine, load_examples  # noqa: E402
+from scam.detector import CHECK_AT, FEATURES, LABELS, MODELS, RED_FLAGS, WARN_AT, combine, load_calibration, load_examples  # noqa: E402
+from system_one.calibration import loo_predict  # noqa: E402
 from scam.recorded import latest_calls  # noqa: E402
 
 RESULTS = HERE / "results"
@@ -86,34 +86,14 @@ def recorded_answers(provider: str) -> tuple[dict, list[dict]]:
     return out, list(sessions.values())
 
 
-def logistic_regression_loo(X, y):
-    """Leave-one-out predictions + weights fitted on all data. Needs scikit-learn."""
-    try:
-        from sklearn.linear_model import LogisticRegression
-    except ImportError:
-        return None, None
-    preds = []
-    for i in range(len(X)):
-        Xtr = [x for j, x in enumerate(X) if j != i]
-        ytr = [v for j, v in enumerate(y) if j != i]
-        if len(set(ytr)) < 2:
-            preds.append(0.5)
-            continue
-        m = LogisticRegression(C=1.0, max_iter=1000).fit(Xtr, ytr)
-        preds.append(float(m.predict_proba([X[i]])[0][1]))
-    full = LogisticRegression(C=1.0, max_iter=1000).fit(X, y)
-    weights = dict(zip([f["label"] for f in RED_FLAGS], full.coef_[0].tolist()))
-    return preds, weights
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--providers", nargs="+", default=["jev", "clm"], choices=["jev", "clm"])
+    ap.add_argument("--providers", nargs="+", default=MODELS, choices=["jev", "clm"])
     args = ap.parse_args()
 
     listings = load_examples()
     labels = [1 if x["label"] == "scam" else 0 for x in listings]
-    report = ["# Scam detector: Jev vs CLM", "",
+    report = ["# Scam detector: evaluation (" + ", ".join(args.providers) + ")", "",
               f"{len(listings)} listings ({sum(labels)} scams). Flagged = decision 'check' or 'warn' "
               f"(risk ≥ {CHECK_AT}).", ""]
     metrics: dict[str, dict] = {}
@@ -131,46 +111,53 @@ def main():
             report.append(f"- {prov}: `{m['file']}`, recorded {m['recorded_at']}"
                           f"{', ' + m['where'] if m['where'] else ''}, network ping {m['ping_ms']} ms")
         y = [1 if x["label"] == "scam" else 0 for x in ok]
-        flag_p = [[ans[x["id"]]["probs"][f["id"]] for f in RED_FLAGS] for x in ok]
-        overall = [ans[x["id"]]["probs"]["overall"] for x in ok]
-        combos = [combine(dict(zip([f["id"] for f in RED_FLAGS], fp))) for fp in flag_p]
-        risk = [c["risk"] for c in combos]
-        flagged = [int(c["decision"] != "ok") for c in combos]
+        rows = [[ans[x["id"]]["probs"][k] for k in FEATURES] for x in ok]
+        overall = [r[FEATURES.index("overall")] for r in rows]
+        raw = [combine(dict(zip(FEATURES, r)), None)["risk"] for r in rows]   # uncalibrated noisy-OR
+        # Honest number: each listing is scored by a calibration fitted WITHOUT it.
+        loo = loo_predict(rows, y, l2=1.0) if len(set(y)) == 2 else [0.5] * len(y)
+        cal = load_calibration(prov)
+        flagged = [int(p >= CHECK_AT) for p in loo]
         tp = sum(f and t for f, t in zip(flagged, y))
         fp_ = sum(f and not t for f, t in zip(flagged, y))
         fn = sum((not f) and t for f, t in zip(flagged, y))
         lat = [ans[x["id"]]["latency_ms"] for x in ok]
-        lr_preds, lr_weights = logistic_regression_loo(flag_p, y)
         metrics[prov] = {
             "Answered": f"{len(ok)}/{len(listings)}",
-            "AUC, checklist risk": auc(risk, y),
-            "AUC, one big question": auc(overall, y),
-            "AUC, logistic regression (LOO)": auc(lr_preds, y) if lr_preds else None,
-            "Brier, one big question (lower = better)": brier(overall, y),
-            "Accuracy (flagged vs label)": sum(f == t for f, t in zip(flagged, y)) / len(y),
+            "AUC, raw checklist (no calibration)": auc(raw, y),
+            "AUC, raw one big question": auc(overall, y),
+            "AUC, calibrated (leave-one-out)": auc(loo, y),
+            "Brier, raw one big question (lower = better)": brier(overall, y),
+            "Brier, calibrated (leave-one-out)": brier(loo, y),
+            "Accuracy, calibrated (flag at check)": sum(f == t for f, t in zip(flagged, y)) / len(y),
             "Precision": tp / (tp + fp_) if tp + fp_ else None,
             "Recall (scams caught)": tp / (tp + fn) if tp + fn else None,
             "Median latency (ms)": statistics.median(lat),
             "95th pct latency (ms)": percentile(lat, 0.95),
         }
-        for x, c, o in zip(ok, combos, overall):
-            rows_csv.append({"provider": prov, "id": x["id"], "label": x["label"], "risk": round(c["risk"], 4),
-                             "decision": c["decision"], "overall_p": round(o, 4),
-                             **{f["id"]: round(ans[x["id"]]["probs"][f["id"]], 4) for f in RED_FLAGS},
+        for x, r, o, rp, lp in zip(ok, rows, overall, raw, loo):
+            rows_csv.append({"provider": prov, "id": x["id"], "label": x["label"],
+                             "raw_risk": round(rp, 4), "calibrated_loo": round(lp, 4),
+                             "decision": "warn" if lp >= WARN_AT else "check" if lp >= CHECK_AT else "ok",
+                             **{k: round(v, 4) for k, v in zip(FEATURES, r)},
                              "latency_ms": round(ans[x["id"]]["latency_ms"], 1)})
-        extra += [f"## {prov}: calibration of the one big question", "",
-                  "| Predicted P(scam) | n | mean predicted | actual scam rate |", "|---|---|---|---|"]
-        extra += [f"| {b} | {n} | {mp:.2f} | {ar:.2f} |" for b, n, mp, ar in calibration_bins(overall, y)]
-        extra.append("")
-        if lr_weights:
-            extra += [f"## {prov}: learned logistic-regression weights", "",
-                      "Positive = pushes towards scam. Compare with the hand-set strengths in scam/detector.py.", "",
-                      "| Red flag | weight |", "|---|---|"]
-            extra += [f"| {k} | {v:+.2f} |" for k, v in sorted(lr_weights.items(), key=lambda kv: -kv[1])]
+        for name, probs in (("raw one big question", overall), ("calibrated (leave-one-out)", loo)):
+            extra += [f"## {prov}: reliability, {name}", "",
+                      "If the model is calibrated, 'mean predicted' matches 'actual scam rate'.", "",
+                      "| Predicted P(scam) | n | mean predicted | actual scam rate |", "|---|---|---|---|"]
+            extra += [f"| {b} | {n} | {mp:.2f} | {ar:.2f} |" for b, n, mp, ar in calibration_bins(probs, y)]
             extra.append("")
-        misses = [f"{x['id']} ({x['label']}, risk {c['risk']:.2f})" for x, c, t in zip(ok, combos, y)
-                  if int(c["decision"] != "ok") != t]
-        extra += [f"**{prov} mistakes:** " + (", ".join(misses) or "none"), ""]
+        if cal:
+            extra += [f"## {prov}: calibration weights (data/calibration_{prov}.json)", "",
+                      "Per standardised CLM score. Positive = a higher yes-score pushes towards scam.", "",
+                      "| Question | weight |", "|---|---|"]
+            extra += [f"| {LABELS[k]} | {w:+.2f} |" for k, w in
+                      sorted(zip(cal["features"] if "features" in cal else FEATURES, cal["weights"]), key=lambda kv: -kv[1])]
+            extra.append("")
+        else:
+            extra += [f"_{prov}: no calibration file yet. Run `python tools/calibrate.py`._", ""]
+        misses = [f"{x['id']} ({x['label']}, {p:.2f})" for x, p, t in zip(ok, loo, y) if int(p >= CHECK_AT) != t]
+        extra += [f"**{prov} mistakes (calibrated, leave-one-out):** " + (", ".join(misses) or "none"), ""]
 
     def fmt(v):
         if v is None:

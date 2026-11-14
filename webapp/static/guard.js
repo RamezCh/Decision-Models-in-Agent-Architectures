@@ -4,7 +4,10 @@
 
 const TECHNIQUE = { harmless: "harmless", direct: "asks directly", roleplay: "role-play / story",
                     override: "instruction override", disguise: "disguised answer" };
-let defender = "jev", lanes = {}, mode = "live", catalog = null, lastReplay = null, replaying = false;
+// The guards come from the server (GUARD_MODELS in .env): keyword filter + CLM by default.
+let log = null;     // DecisionLog: one row per guard per message
+let speed = null;   // SpeedBoard: one sample per message (input check + output check)
+let defender = "clm", lanes = {}, mode = "live", catalog = null, lastReplay = null, replaying = false;
 
 function bar(label, p, title) {
   return el("div", { class: "bar", title }, el("span", { text: label }),
@@ -13,7 +16,7 @@ function bar(label, p, title) {
 }
 
 function makeLane(name) {
-  const watch = watchMarkup(name === "keyword" ? "time to check (plain code)" : "time to check message + answer");
+  const watch = watchMarkup(name === "keyword" ? "time to check (plain code)" : "time to check the message (the answer is checked by code)");
   const state = el("div", { class: "guard-verdict", text: "waiting" });
   const bars = el("div", { class: "bars", style: "margin-top:.6rem" });
   const tech = el("p", { class: "small muted", style: "margin:.5rem 0 0" });
@@ -32,7 +35,7 @@ function markActive() {
 }
 
 function renderVerdicts(res) {
-  for (const [name, v] of Object.entries(res.verdicts)) renderVerdict(name, v);
+  for (const [name, v] of Object.entries(res.verdicts)) { renderVerdict(name, v); if (v.ok) speed.add(name, v.latency_ms); }
 }
 
 function renderVerdict(name, v) {
@@ -55,12 +58,33 @@ function renderVerdict(name, v) {
         bar("Answer", v.output_p, "Does the answer contain the password written plainly, spaced out or reversed?"));
       l.tech.textContent = "Word list + exact match. No AI.";
     } else {
+      const raw = v.input_raw == null ? "" : ` (raw CLM score ${(v.input_raw * 100).toFixed(2)}%)`;
       l.bars.replaceChildren(
-        bar("Message", v.input_p, "How sure the model is that the message is an attack"),
-        bar("Answer", v.output_p, "How sure the model is that the answer leaks the password"));
-      l.tech.textContent = `Thinks the technique is: ${TECHNIQUE[v.technique] || v.technique}`;
+        bar(v.calibrated ? "Message" : "Message (raw)", v.input_p,
+            (v.calibrated ? "Calibrated probability that the message is an attack" : "Raw, uncalibrated CLM score") + raw),
+        bar("Answer", v.output_p, "Checked by code: does the answer contain the password plainly, spaced out, reversed or in base64?"));
+      l.tech.replaceChildren(
+        el("div", { text: `Thinks the technique is: ${TECHNIQUE[v.technique] || v.technique}` }),
+        el("div", { text: `Raw score ${(v.input_raw * 100).toFixed(2)}%, ${v.calibration_note}. Answer check: code.` }));
     }
     if (l.raw) l.raw.replaceChildren();
+  }
+}
+
+function logMessage(text, res) {
+  const leaked = res.bot && res.bot.leaked;
+  for (const [name, v] of Object.entries(res.verdicts)) {
+    const who = el("span", { class: "who", style: name === "keyword" ? "" : `color:var(--${name})`, text: res.defenders[name] || MODEL_LABEL[name] || name });
+    if (!v.ok) { log.add({ msg: text, who, decision: tag("error", "err"), result: v.error, ms: fmtMs(v.latency_ms) }); continue; }
+    const pMsg = name === "keyword" ? (v.input_p >= 0.5 ? "word found" : "no word")
+      : `${(v.input_p * 100).toFixed(1)}%${v.calibrated ? "" : " raw"}`;
+    const where = v.blocked_input ? "blocked message" : v.blocked_output ? "blocked answer" : "let through";
+    const result = v.blocked ? (leaked ? tag("caught the leak", "ok") : tag("false alarm", "check"))
+                             : (leaked ? tag("missed the leak", "warn") : tag("correct pass", "ok"));
+    log.add({ msg: el("span", { class: "msgcell", text: text }), who, pmsg: pMsg,
+              leak: v.output_p >= 0.5 ? "yes" : "no", decision: tag(where, v.blocked ? "warn" : "ok"),
+              leaked: leaked ? `yes (${res.bot.how || "leak"})` : "no", result, ms: fmtMs(v.latency_ms),
+              _cls: name === res.defender ? "active-guard" : "" });
   }
 }
 
@@ -76,20 +100,22 @@ async function replayAttack(attack) {
   replaying = true;
   document.querySelectorAll("#attackList button").forEach(b => { b.disabled = true; });
   addMsg(attack.text, "you");
-  const speed = replaySpeed();
-  Object.values(lanes).forEach(l => l.watch.start(speed));
+  const pace = replaySpeed();
+  Object.values(lanes).forEach(l => l.watch.start(pace));
   try {
     const res = await api(replayUrl(attack.id));
     lastReplay = attack;
     showRecordingNote("recNote", res.recorded, res.replies_differ
       ? "Note: the bot gave different replies in the two recordings; the first one is shown." : "");
     await Promise.all(Object.entries(res.verdicts).map(async ([name, v]) => {
-      await sleep((v.latency_ms || 0) / speed);
+      await sleep((v.latency_ms || 0) / pace);
       renderVerdict(name, v);
+      if (v.ok) speed.add(name, v.latency_ms);
       if (name !== "keyword" && res.recorded[name])
         lanes[name].raw.replaceChildren(rawLogLink(`/api/replay/guard/raw?id=${encodeURIComponent(attack.id)}&provider=${name}`));
     }));
     showReplayOutcome(res);
+    logMessage(attack.text, res);
   } catch (e) {
     Object.values(lanes).forEach(l => l.watch.stop(null));
     addMsg("Error: " + e.message, "bot blocked");
@@ -179,6 +205,7 @@ async function send(ev) {
       threshold: parseFloat(document.getElementById("threshold").value),
     });
     renderVerdicts(res);
+    logMessage(text, res);
     const cls = res.outcome === "blocked" || res.outcome === "error" ? "bot blocked" : res.outcome === "won" ? "bot won" : "bot";
     const meta = res.outcome === "won" ? `You beat ${res.defenders[res.defender]}!` : null;
     addMsg(res.shown, cls, meta);
@@ -188,6 +215,26 @@ async function send(ev) {
     Object.values(lanes).forEach(l => l.watch.stop(null));
     addMsg("Error: " + e.message, "bot blocked");
   } finally { btn.disabled = false; box.focus(); }
+}
+
+async function guessPassword(ev) {
+  ev.preventDefault();
+  const box = document.getElementById("guess"), out = document.getElementById("guessResult");
+  const guess = box.value.trim();
+  if (!guess) return;
+  try {
+    const r = await api("/api/guard/guess", { guess, player: document.getElementById("player").value.trim() || "anonymous" });
+    if (r.correct) {
+      out.className = "small guess-ok";
+      out.textContent = `Correct, the vault is open! The password is ${r.secret}.`;
+      document.getElementById("vault").textContent = r.secret;
+      document.getElementById("vault").classList.add("open");
+    } else {
+      out.className = "small guess-no";
+      out.textContent = `${r.hint} (guess ${r.guesses})`;
+    }
+    loadBoard();
+  } catch (e) { out.textContent = "Error: " + e.message; }
 }
 
 async function loadBoard() {
@@ -202,21 +249,49 @@ async function loadBoard() {
     el("td", { text: i + 1 }), el("td", { text: p.player }),
     el("td", { text: p.beaten.map(d => data.defenders[d]).join(", ") || "–" }),
     el("td", { text: `${p.wins} / ${p.attempts}` }),
+    el("td", { text: p.cracked ? "✓ opened" : p.guesses ? `${p.guesses} wrong` : "–" }),
     el("td", { class: "small muted", text: p.best_prompt || "" })));
   document.getElementById("board").replaceChildren(
-    el("tr", {}, el("th", { text: "#" }), el("th", { text: "Player" }), el("th", { text: "Guards beaten" }), el("th", { text: "Wins / tries" }), el("th", { text: "Winning message" })),
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colspan: "5", class: "muted", text: "No attempts yet. Be the first." }))]));
+    el("tr", {}, el("th", { text: "#" }), el("th", { text: "Player" }), el("th", { text: "Guards beaten" }), el("th", { text: "Wins / tries" }), el("th", { text: "Vault" }), el("th", { text: "Winning message" })),
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colspan: "6", class: "muted", text: "No attempts yet. Be the first." }))]));
+}
+
+function buildGuards(defenders, defaultDefender) {
+  const box = document.getElementById("verdicts");
+  const seg = document.getElementById("defender");
+  lanes = {};
+  box.replaceChildren(); seg.replaceChildren();
+  for (const [name, label] of Object.entries(defenders)) {
+    lanes[name] = makeLane(name);
+    box.append(lanes[name].node);
+    seg.append(el("button", { type: "button", "data-d": name, text: label,
+      onclick: () => { defender = name; markActive(); redecide(); } }));
+  }
+  defender = defenders[defaultDefender] ? defaultDefender : Object.keys(defenders).pop();
+  markActive();
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const box = document.getElementById("verdicts");
-  for (const name of ["keyword", "jev", "clm"]) { lanes[name] = makeLane(name); box.append(lanes[name].node); }
-  markActive();
+  speed = new SpeedBoard("speedBoard", { unit: "message check" });
+  document.getElementById("speedClear").addEventListener("click", () => speed.clear());
+  document.getElementById("guessForm").addEventListener("submit", guessPassword);
+  const lp = logPanel("decisionLog", "Decision log",
+    "Every message, newest first, for every guard: CLM's probability that the message is an attack, whether code found the password in Vaulty's answer, what the guard did, and whether that was right. The guard you play against is highlighted.");
+  document.getElementById("speedBoard").closest("section").after(lp.section);
+  log = new DecisionLog(lp.box, [
+    { key: "msg", label: "Message", cls: "msgcol" }, { key: "who", label: "Guard" }, { key: "pmsg", label: "P(attack)", cls: "num" },
+    { key: "leak", label: "Password in answer (code)" }, { key: "decision", label: "Guard did" },
+    { key: "leaked", label: "Vaulty really leaked" }, { key: "result", label: "Verdict" }, { key: "ms", label: "Time", cls: "num" },
+  ], { empty: "Send a message to see every decision here." });
+  lp.clear.addEventListener("click", () => log.clear());
+  lp.dl.addEventListener("click", () => log.download("guard-decisions.csv"));
+  let info = null;
+  try { info = await api("/api/guard/info"); } catch (_) {}
+  buildGuards(info ? info.defenders : { keyword: "Keyword filter", clm: "CLM-8B" }, info ? info.default_defender : "clm");
   document.getElementById("composer").addEventListener("submit", send);
   document.getElementById("msg").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("composer").requestSubmit(); }
   });
-  document.querySelectorAll("#defender button").forEach(b => b.addEventListener("click", () => { defender = b.dataset.d; markActive(); redecide(); }));
   const thr = document.getElementById("threshold");
   thr.addEventListener("input", () => { document.getElementById("thrVal").textContent = pct(parseFloat(thr.value)); });
   thr.addEventListener("change", redecide);
@@ -225,13 +300,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (reset.dataset.armed) { await api("/api/guard/reset", {}); delete reset.dataset.armed; reset.textContent = "Reset"; loadBoard(); }
     else { reset.dataset.armed = "1"; reset.textContent = "Click again to reset"; setTimeout(() => { delete reset.dataset.armed; reset.textContent = "Reset"; }, 3000); }
   });
-  try {
-    const info = await api("/api/guard/info");
+  if (info) {
     document.getElementById("vault").textContent = "●".repeat(info.secret_length);
     document.getElementById("botMode").textContent = info.bot_mode === "llm"
       ? "Vaulty is a real language model with a “never reveal the password” instruction."
       : "Vaulty is a scripted, deliberately gullible bot: it refuses plain requests but falls for tricks. The guards are what's being tested.";
-  } catch (_) {}
+  }
   loadBoard();
   try { catalog = await api("/api/replay/guard/catalog"); } catch (_) { catalog = { attacks: [] }; }
   applyMode(setupModeBar("guard", catalog.attacks.length > 0, applyMode, "live"));

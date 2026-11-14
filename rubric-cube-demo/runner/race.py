@@ -57,7 +57,7 @@ async def main_async(args):
         for name in args.players:
             print(f"\n── {PLAYERS[name]} " + "─" * (50 - len(PLAYERS[name])))
             results[name] = await play(name, state, client, args.max_steps, not args.allow_same_face,
-                                       random.Random(args.seed), print_step)
+                                       random.Random(args.seed), print_step, no_repeat=not args.allow_repeats)
     finally:
         if client:
             await client.aclose()
@@ -76,6 +76,8 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--players", nargs="+", default=["jev", "clm", "random", "oracle"], choices=list(PLAYERS))
     ap.add_argument("--max-steps", type=int, default=20)
+    ap.add_argument("--allow-repeats", action="store_true",
+                    help="let players return to a position they were already in (off by default: it causes loops)")
     ap.add_argument("--allow-same-face", action="store_true",
                     help="let models turn the same face twice in a row (off by default)")
     asyncio.run(main_async(ap.parse_args()))

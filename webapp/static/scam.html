@@ -21,7 +21,7 @@
 </header>
 <main>
   <h1>Is this Berlin flat a scam?</h1>
-  <p class="lede">Instead of one big “scam or not?” question, each model answers nine small yes/no questions,
+  <p class="lede">Instead of one big “scam or not?” question, CLM-8B answers nine small yes/no questions,
     the red flags a careful flat-hunter checks. Ordinary code then combines them into a risk score, so you can
     see exactly why a listing was flagged.</p>
 
@@ -59,13 +59,23 @@
     <section>
       <div class="lanes" id="verdicts"></div>
       <section class="panel" style="margin-top:1rem">
-        <h2>Red flags, model by model</h2>
+        <h2>Red flags</h2>
+        <p class="small muted" style="margin-top:-.3rem">Bars: CLM's raw yes-score for each question. Below each bar: how much
+          that answer moved the calibrated risk, compared with a typical listing. Hover a row for the exact question and
+          the "yes" and "no" descriptions CLM compares against.</p>
         <table class="flag-table" id="flags">
-          <thead><tr><th scope="col">Red flag</th><th scope="col" style="color:var(--jev)">Jev</th><th scope="col" style="color:var(--clm)">CLM-8B</th></tr></thead>
-          <tbody><tr><td colspan="3" class="muted">Check a listing to see the answers.</td></tr></tbody>
+          <thead><tr id="flagHead"><th scope="col">Red flag</th></tr></thead>
+          <tbody><tr><td colspan="2" class="muted">Check a listing to see the answers.</td></tr></tbody>
         </table>
         <p class="small muted" id="agree"></p>
         <div class="truth hidden" id="truth"></div>
+      </section>
+      <section class="panel" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+          <h2>Speed</h2>
+          <button class="btn ghost small" type="button" id="speedClear">Clear</button>
+        </div>
+        <div id="speedBoard"></div>
       </section>
       <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
         <h2 id="recSummaryTitle">All recorded listings</h2>

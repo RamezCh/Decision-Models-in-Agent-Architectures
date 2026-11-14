@@ -1,0 +1,76 @@
+# CLM-8B for the demos: one pod on one A100, plus a disk for the downloaded model.
+#
+#   kubectl apply -f k8s/clm.yaml                              start
+#   kubectl -n vpdx3758 port-forward pod/clm 8700:8700         use it at http://127.0.0.1:8700
+#   kubectl -n vpdx3758 delete pod clm                         stop (the disk and the model stay)
+#
+# Both servers listen on 127.0.0.1 inside the pod, so only `kubectl port-forward`
+# (VPN + your cluster login) can reach them.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clm-cache
+  namespace: vpdx3758
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 40Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: clm
+  namespace: vpdx3758
+  labels:
+    app: clm
+spec:
+  priorityClassName: normal
+  automountServiceAccountToken: false
+  nodeSelector:
+    gpu: a100
+  containers:
+    - name: clm
+      image: vllm/vllm-openai:v0.17.1
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -e
+          pip install --quiet --no-deps contrastive-lm==0.1.0
+          # 1) Qwen3-8B encoder: embeddings only, sized for one user (~24 GB of the A100)
+          vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling \
+            --max-model-len 2048 --gpu-memory-utilization 0.6 --enforce-eager \
+            --host 127.0.0.1 --port 8090 &
+          # 2) CLM heads + the /v1/systemone API the demos call
+          exec clm-serve --host 127.0.0.1 --port 8700
+      env:
+        - name: HF_HOME
+          value: /cache/hf
+        - name: CLM_CKPT_DIR
+          value: /cache/clm
+      resources:
+        requests:
+          cpu: "2"
+          memory: 24Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: "4"
+          memory: 32Gi
+          nvidia.com/gpu: 1
+      readinessProbe:            # READY 1/1 once the model is loaded and CLM answers
+        exec:
+          command: ["python3", "-c", "import json, urllib.request as u; assert json.load(u.urlopen('http://127.0.0.1:8700/health'))['embedder']"]
+        periodSeconds: 15
+      volumeMounts:
+        - name: cache
+          mountPath: /cache
+        - name: shm
+          mountPath: /dev/shm
+  volumes:
+    - name: cache
+      persistentVolumeClaim:
+        claimName: clm-cache
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 2Gi

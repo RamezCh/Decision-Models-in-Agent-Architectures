@@ -94,6 +94,19 @@ def providers_from_env() -> dict[str, Provider]:
     }
 
 
+# Which models each demo uses. Scam check and Beat the guard use CLM only by
+# default; set e.g. SCAM_MODELS=jev,clm in .env to compare both again.
+DEMO_DEFAULT_MODELS = {"scam": ["clm"], "guard": ["clm"]}
+
+
+def demo_models(demo: str) -> list[str]:
+    """Models a demo asks, from <DEMO>_MODELS (comma-separated) or the default above."""
+    raw = os.getenv(f"{demo.upper()}_MODELS", "")
+    chosen = [m.strip().lower() for m in raw.split(",") if m.strip()]
+    valid = [m for m in chosen if m in ("jev", "clm")]
+    return list(dict.fromkeys(valid)) or list(DEMO_DEFAULT_MODELS.get(demo, ["jev", "clm"]))
+
+
 # ── results ───────────────────────────────────────────────────────────────────
 
 @dataclass
