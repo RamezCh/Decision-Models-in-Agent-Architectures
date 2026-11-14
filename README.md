@@ -2,6 +2,10 @@
 
 This repository contains the presentation plan, slide outline, architecture benchmarks, and a live proof-of-concept demo comparing **Typesafe Jev** and Stanford/NVIDIA's **Open-CLM-8B** against traditional auto-regressive large language models.
 
+> [!IMPORTANT]
+> **🆕 Landscape update (14 Nov 2026):** The field has grown beyond Jev and CLM-8B. Google (Gemini Decision 1), Perplexity (Decider), AWS (Strands Decider), OpenAI (Decisions API) and vLLM Semantic Router have all entered, plus an Amazon production case study on ticket labelling.
+> 👉 **Read it here: [docs/landscape-update-2026-11.md](docs/landscape-update-2026-11.md)**
+
 ---
 
 ## 📌 Presentation Overview
