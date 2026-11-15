@@ -15,7 +15,9 @@ function bar(label, p, title) {
 }
 
 function makeLane(name) {
-  const watch = watchMarkup(name === "keyword" ? "time to check (plain code)" : "time to check the message (the answer is checked by code)");
+  const watch = watchMarkup(name === "keyword" ? "time to check (plain code)"
+    : name === "clm_review" ? "time to decide (CLM, plus Gemma when borderline)"
+    : "time to check the message (the answer is checked by code)");
   const state = el("div", { class: "guard-verdict", text: "waiting" });
   const bars = el("div", { class: "bars", style: "margin-top:.6rem" });
   const tech = el("p", { class: "small muted", style: "margin:.5rem 0 0" });
@@ -44,7 +46,8 @@ function renderVerdict(name, v) {
     l.watch.stop(v.latency_ms == null ? null : v.latency_ms);
     if (name !== "keyword") setExchange(l.behind, v.exchange);
     if (!v.ok) {
-      l.state.replaceChildren(el("span", { class: "blocked", text: v.error === "not recorded" ? "Not recorded" : "Offline" }));
+      l.state.replaceChildren(el("span", { class: "blocked", text: v.error === "not recorded" ? "Not recorded"
+        : (v.error || "").startsWith("borderline") ? "Live only" : "Offline" }));
       l.err.textContent = v.error; l.err.classList.toggle("hidden", v.error === "not recorded");
       l.bars.replaceChildren(); l.tech.textContent = "";
       return;
@@ -67,9 +70,25 @@ function renderVerdict(name, v) {
         el("div", { text: "CLM's answers: " + parts.map(x =>
           `${x.label} ${pct(x.p)}${x.kind === "harmless" ? " (harmless)" : ""}`).join(" · ") }),
         el("div", { class: "muted", text: `Pure CLM (${v.design}), no extra model. Blocks at the threshold. The answer is checked by code.` }));
+      if (name === "clm_review") l.tech.replaceChildren(...reviewLines(v));
     }
     if (l.raw) l.raw.replaceChildren();
   }
+}
+
+// CLM + Gemma review: which path the message took, and what the reviewer said
+function reviewLines(v) {
+  const band = v.band ? `${pct(v.band[0])}–${pct(v.band[1])}` : "the band";
+  if (v.path === "fast") {
+    return [el("div", { text: `Fast path: CLM said ${pct(v.input_p)}, clearly ${v.blocked_input ? "above" : "below"} the threshold ` +
+                              `(outside ${band}), so CLM decided alone.` }),
+            el("div", { class: "muted", text: "Only borderline messages are sent to Gemma." })];
+  }
+  const r = v.review;
+  return [el("div", { text: `Borderline: CLM said ${pct(v.input_p)} (inside ${band}), so Gemma reviewed the message.` }),
+          el("div", {}, el("strong", { text: `Gemma: ${r.block ? "BLOCK" : "ALLOW"}` }), ` (${fmtMs(r.ms)}) ${r.reason || ""}`),
+          el("details", { class: "behind-raw" }, el("summary", { text: "Gemma's instructions and reply" }),
+             el("pre", { class: "behind-pre", text: `${r.prompt || ""}\n\n--- reply ---\n${r.reply || ""}` }))];
 }
 
 function logMessage(text, res) {
@@ -78,6 +97,7 @@ function logMessage(text, res) {
     const who = el("span", { class: "who", style: name === "keyword" ? "" : `color:var(--${name})`, text: res.defenders[name] || MODEL_LABEL[name] || name });
     if (!v.ok) { log.add({ msg: text, who, decision: tag("error", "err"), result: v.error, ms: fmtMs(v.latency_ms) }); continue; }
     const pMsg = name === "keyword" ? (v.input_p >= 0.5 ? "word found" : "no word")
+      : name === "clm_review" && v.path === "review" ? `${(v.input_p * 100).toFixed(1)}% → Gemma: ${v.review.block ? "BLOCK" : "ALLOW"}`
       : `${(v.input_p * 100).toFixed(1)}%`;
     const where = v.blocked_input ? "blocked message" : v.blocked_output ? "blocked answer" : "let through";
     const result = v.blocked ? (leaked ? tag("caught the leak", "ok") : tag("false alarm", "check"))

@@ -1,6 +1,6 @@
 // Shared helpers: header status, API calls, live stopwatches.
 
-const MODEL_LABEL = { jev: "Jev", clm: "CLM-8B", llm: "BHT Medium (LLM)", random: "Random mover", oracle: "Perfect solver", keyword: "Keyword filter" };
+const MODEL_LABEL = { jev: "Jev", clm: "CLM-8B", llm: "BHT Medium (LLM)", clm_review: "CLM + Gemma review", random: "Random mover", oracle: "Perfect solver", keyword: "Keyword filter" };
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);

@@ -46,12 +46,15 @@ from system_one.client import demo_models
 from system_one.exchange import exchange
 
 from .designs import DESIGNS
+from .review import REVIEW_ABOVE, REVIEW_BELOW, Reviewer, in_band
 from .vault_bot import DEFAULT_LEVEL, LEVELS, VaultBot, normalized_leak
 
 # Models guarding the vault. CLM only by default; GUARD_MODELS=jev,clm in .env adds Jev.
 MODELS = demo_models("guard")
 _LABELS = {"jev": "Jev", "clm": "CLM-8B"}
 DEFENDERS = {"keyword": "Keyword filter", **{m: _LABELS[m] for m in MODELS}}
+if "clm" in MODELS:     # System 1 + System 2: CLM decides clear cases, a chat LLM reviews borderline ones
+    DEFENDERS["clm_review"] = "CLM + Gemma review"
 DEFAULT_DEFENDER = MODELS[0]
 
 HERE = Path(__file__).resolve().parent.parent
@@ -97,7 +100,30 @@ def model_view(input_res) -> dict:
     return answers_view(answers, input_res.model, input_res.latency_ms, input_res.server_ms)
 
 
-def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: float) -> dict[str, dict]:
+def review_verdict(base: dict, threshold: float, review: dict | None) -> dict:
+    """CLM + Gemma review: CLM's verdict outside the band; inside it, the reviewer decides."""
+    if not base.get("ok"):
+        return {**base}
+    p = base["input_p"]
+    if not in_band(p, threshold):
+        return {**base, "path": "fast", "review": None,
+                "band": [threshold - REVIEW_BELOW, threshold + REVIEW_ABOVE]}
+    band = [threshold - REVIEW_BELOW, threshold + REVIEW_ABOVE]
+    if review is None:
+        return {"ok": False, "error": "borderline: needs the live reviewer (not recorded)", "blocked": False,
+                "latency_ms": base.get("latency_ms"), "model": base.get("model"), "exchange": base.get("exchange")}
+    if not review.get("ok"):
+        return {"ok": False, "error": f"reviewer failed: {review.get('error')}", "blocked": False,
+                "latency_ms": (base.get("latency_ms") or 0) + (review.get("ms") or 0), "model": base.get("model"),
+                "exchange": base.get("exchange")}
+    blocked_in = bool(review["block"])
+    return {**base, "path": "review", "review": review, "band": band,
+            "blocked_input": blocked_in, "blocked": blocked_in or base["blocked_output"],
+            "latency_ms": (base.get("latency_ms") or 0) + review["ms"]}
+
+
+def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: float,
+                   reviews: dict | None = None) -> dict[str, dict]:
     """Decisions of every defender for one exchange."""
     t0 = time.perf_counter()
     leak = normalized_leak(reply) is not None        # the answer check: code, for every defender
@@ -126,6 +152,8 @@ def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: flo
             "latency_ms": v["input_ms"], "server_ms": v.get("server_ms"),
             "model": v.get("model"), "error": None,
         }
+    if "clm_review" in DEFENDERS:
+        verdicts["clm_review"] = review_verdict(verdicts["clm"], threshold, (reviews or {}).get("clm"))
     return verdicts
 
 
@@ -148,6 +176,7 @@ class GuardGame:
     def __init__(self, client):
         self.client = client
         self.bot = VaultBot()
+        self.reviewer = Reviewer()
         self.board: dict[str, dict] = {}
         self.stats = {d: {"leaks_caught": 0, "leaks_missed": 0, "harmless_blocked": 0, "harmless_passed": 0}
                       for d in DEFENDERS}
@@ -155,6 +184,7 @@ class GuardGame:
 
     async def aclose(self):
         await self.bot.aclose()
+        await self.reviewer.aclose()
 
     # ── persistence ──────────────────────────────────────────────────────
     def _load(self):
@@ -196,7 +226,13 @@ class GuardGame:
             r = in_res[n]
             views[n]["exchange"] = exchange(n, state, INPUT_QUESTIONS, r.answers, r.latency_ms, r.server_ms,
                                             r.model, r.error)
-        verdicts = build_verdicts(text, bot["reply"], views, threshold)
+        # System 2 only for borderline messages: CLM's score is close to the threshold
+        reviews = {}
+        clm = views.get("clm")
+        if "clm_review" in DEFENDERS and clm and clm.get("ok") and in_band(clm["attack"], threshold):
+            reviews["clm"] = (await self.reviewer.review(text)) if self.reviewer.available else \
+                {"ok": False, "error": "no API key: set BHT_LLM_INF_API_KEY in your environment", "ms": 0}
+        verdicts = build_verdicts(text, bot["reply"], views, threshold, reviews)
         leaked = bool(bot["leaked"])
 
         for name, v in verdicts.items():
@@ -247,5 +283,6 @@ class GuardGame:
         from .vault_bot import SECRET
         return {"bot_mode": self.bot.mode, "defenders": DEFENDERS, "default_defender": DEFAULT_DEFENDER,
                 "bot_label": self.bot.label, "design": DESIGN.name, "design_text": DESIGN.describe,
-                "default_threshold": DEFAULT_THRESHOLD, "threshold_source": DESIGN.threshold_source, "levels": LEVELS, "default_level": DEFAULT_LEVEL,
+                "default_threshold": DEFAULT_THRESHOLD, "threshold_source": DESIGN.threshold_source,
+                "review_band": [REVIEW_BELOW, REVIEW_ABOVE], "reviewer": self.reviewer.llm.model, "levels": LEVELS, "default_level": DEFAULT_LEVEL,
                 "input_questions": INPUT_QUESTIONS, "secret_length": len(SECRET)}

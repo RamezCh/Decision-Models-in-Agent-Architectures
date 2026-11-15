@@ -99,6 +99,8 @@ textarea { resize: vertical; min-height: 9rem; line-height: 1.45; }
 .lane { background: var(--surface); border: 1px solid var(--line); border-top: 6px solid var(--lane, var(--ink)); border-radius: var(--radius); padding: .9rem 1rem 1rem; }
 .lane.jev { --lane: var(--jev); --lane-soft: var(--jev-soft); }
 .lane.clm { --lane: var(--clm); --lane-soft: var(--clm-soft); }
+.lane.clm_review { --lane: var(--llm); --lane-soft: #f8e6ee; }
+:root { --clm_review: var(--llm); }
 .lane.llm { --lane: var(--llm); --lane-soft: #f8e6ee; }
 .lane.random { --lane: var(--rnd); --lane-soft: var(--kw-soft); }
 .lane.oracle { --lane: var(--orc); --lane-soft: #f6ecd2; }
