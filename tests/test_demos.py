@@ -580,12 +580,54 @@ def test_cube_text_matches_the_engine():
     assert "Front face (green centre), seen from the front" in t and "green green yellow" in t
     assert "Top face (white centre), seen from above: its top row touches the back face" in t
     assert set(FACE_EDGES) == set("UFRBLD")
-    assert "front → top" in move_description("R", s) and "top → back" in move_description("R", s)
-    assert "right → front" in move_description("U", s)          # U clockwise: right face's top row comes to the front
-    assert sorted(_layer_flow("R2")) == sorted(["top → bottom", "front → back", "bottom → top", "back → front"])
+    r = move_description("R", s)
+    assert "the front face's right column → the top face's right column;" in r
+    assert "the top face's right column → the back face's left column (order reversed)" in r
+    assert "the right face's top row → the front face's top row" in move_description("U", s)   # U: right comes to front
+    assert len(_layer_flow("R2")) == 4
 
 
 def test_llm_move_parser_takes_the_final_answer():
     from agents.players import parse_move
     assert parse_move("R would undo it, U2 does nothing. Final move: **F'**", ["R", "U2", "F'"]) == "F'"
     assert parse_move("Not R. Better U2.", ["R", "U2"]) == "U2"          # no 'Final move': the last one named
+
+
+def test_move_descriptions_alone_determine_the_next_state():
+    """Apply every move using ONLY its English description (what the models read) and compare with the
+    engine on random cubes. If the text were ambiguous or wrong, this would disagree."""
+    import random
+    import re
+    from agents.players import move_description
+    from cube.cube_state import ALL_MOVES, FACE_NAMES, FACES, apply_move, apply_moves, solved_state
+    face_of = {v: k for k, v in FACE_NAMES.items()}
+    strip_cells = {"top row": [0, 1, 2], "middle row": [3, 4, 5], "bottom row": [6, 7, 8],
+                   "left column": [0, 3, 6], "middle column": [1, 4, 7], "right column": [2, 5, 8]}
+    rx = re.compile(r"the (\w+) face's (\w+ \w+) → the (\w+) face's (\w+ \w+)( \(order reversed\))?")
+
+    def from_text(state, move):
+        text = move_description(move, state)
+        new = list(state)
+        for f1, s1, f2, s2, rev in rx.findall(text):
+            src = [FACES.index(face_of[f1]) * 9 + c for c in strip_cells[s1]]
+            dst = [FACES.index(face_of[f2]) * 9 + c for c in strip_cells[s2]]
+            if rev:
+                dst = dst[::-1]
+            for a, b in zip(src, dst):
+                new[b] = state[a]
+        # the turned face rotates as its text says: clockwise / counter-clockwise / half turn, as seen from outside
+        base = FACES.index(move[0]) * 9
+        grid = [state[base + i] for i in range(9)]
+        cw = [6, 3, 0, 7, 4, 1, 8, 5, 2]          # new[i] = old[cw[i]] for a clockwise quarter turn
+        turns = 1 if "a quarter turn clockwise" in text else 3 if "counter-clockwise" in text else 2
+        for _ in range(turns):
+            grid = [grid[cw[i]] for i in range(9)]
+        new[base:base + 9] = grid
+        assert ("top row becomes its right column" in text) == (turns == 1)
+        return new
+
+    rng = random.Random(5)
+    for _ in range(20):
+        s = apply_moves(solved_state(), [rng.choice(ALL_MOVES) for _ in range(15)])
+        for m in ALL_MOVES:
+            assert from_text(s, m) == apply_move(s, m), m

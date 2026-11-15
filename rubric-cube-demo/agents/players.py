@@ -51,18 +51,53 @@ FACE_EDGES = {
 _ORDER = "UFRBLD"   # faces in the order the models read them
 
 
+_ROW = ["top row", "middle row", "bottom row"]
+_COL = ["left column", "middle column", "right column"]
+
+
+def _strip(cells: list[int]) -> tuple[str, list[int]]:
+    """Name a row/column of 3 grid cells (0-8) and return the cells in reading order."""
+    rows, cols = {c // 3 for c in cells}, {c % 3 for c in cells}
+    if len(rows) == 1:
+        return _ROW[rows.pop()], sorted(cells)
+    return _COL[cols.pop()], sorted(cells)
+
+
 def _layer_flow(move: str) -> list[str]:
-    """Where the turning layer's side stickers go, read off the engine's permutation (correct by construction)."""
+    """Exactly where the moving strips go, read off the engine's permutation (correct by construction):
+    which row/column of which face lands on which row/column of which face, and whether its order flips."""
     perm = MOVE_PERMS[move]
     dest = {src: dst for dst, src in enumerate(perm)}
-    flow = {}
-    for f in FACES:
+    out = []
+    for f in _ORDER:
         if f == move[0]:
             continue
-        moved = [i for i in range(f_i(f) * 9, f_i(f) * 9 + 9) if dest[i] != i]
-        if moved:
-            flow[f] = FACES[dest[moved[0]] // 9]
-    return [f"{FACE_NAMES[a]} → {FACE_NAMES[b]}" for a, b in flow.items()]
+        base = f_i(f) * 9
+        moved = [i for i in range(base, base + 9) if dest[i] != i]
+        if not moved:
+            continue
+        name, order = _strip([i - base for i in moved])
+        targets = [dest[base + c] for c in order]
+        tface = FACES[targets[0] // 9]
+        tname, torder = _strip([t % 9 for t in targets])
+        same = [t % 9 for t in targets] == torder
+        out.append(f"the {FACE_NAMES[f]} face's {name} → the {FACE_NAMES[tface]} face's {tname}"
+                   + ("" if same else " (order reversed)"))
+    return out
+
+
+def _own_face(move: str) -> str:
+    """What happens to the turned face's own grid, read off the engine's permutation."""
+    perm = MOVE_PERMS[move]
+    dest = {src: dst for dst, src in enumerate(perm)}
+    base = f_i(move[0]) * 9
+    parts = []
+    for cells in ([0, 1, 2], [2, 5, 8]):                 # its top row and its right column
+        name, _ = _strip(cells)
+        targets = [dest[base + c] - base for c in cells]
+        tname, torder = _strip(targets)
+        parts.append(f"its {name} becomes its {tname}" + ("" if targets == torder else " (order reversed)"))
+    return "the face's own 9 stickers turn with it: " + ", ".join(parts)
 
 
 def f_i(face: str) -> int:
@@ -74,8 +109,8 @@ def move_description(move: str, state: list) -> str:
     centre = COLOR_NAMES[state[f_i(face) * 9 + 4]].lower()
     seen = FACE_EDGES[face][0].replace("seen ", "")
     turn = _TURN[move[1:]] + ("" if move.endswith("2") else f" (as seen {seen})")
-    return (f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {turn}; "
-            f"its edge stickers on the neighbouring faces move {', '.join(_layer_flow(move))}")
+    return (f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {turn}; {_own_face(move)}. "
+            f"The 3 stickers next to it on each neighbouring face move: {'; '.join(_layer_flow(move))}.")
 
 
 def net_picture(state: list) -> str:
@@ -119,10 +154,13 @@ def state_text(state: list, last_move: str | None) -> str:
     lines.append("The same cube unfolded (W white, R red, G green, Y yellow, O orange, B blue; top face above the "
                  "row left-front-right-back, bottom face below):")
     lines += ["  " + ln for ln in net_picture(state).splitlines()]
-    lines.append(f"Stickers already matching their face's centre: {stickers_in_place(state)} of 54.")
+    lines.append(f"Stickers already matching their face's centre: {stickers_in_place(state)} of 54 "
+                 "(a rough guide only: on the way to the solution this number can go down).")
     lines.append(f"Previous move: {last_move or 'none'}.")
-    lines.append("Goal: solve the cube so every face shows a single colour. Moves use standard notation: "
-                 "a letter turns that face clockwise as seen looking at that face, ' is counter-clockwise, 2 is a half turn.")
+    lines.append("Goal: every face shows a single colour. Moves use standard notation: a letter turns that face "
+                 "a quarter turn clockwise as seen looking straight at that face from outside, ' is "
+                 "counter-clockwise, 2 is a half turn. Row and column names below refer to the face grids above "
+                 "(\"order reversed\" means the strip's first sticker lands in the other strip's last place).")
     return "\n".join(lines)
 
 
@@ -130,7 +168,7 @@ def cube_question(state: list, moves: list[str]) -> dict:
     return {
         "next_move": {
             "type": "choice",
-            "instructions": "Which single move brings this Rubik's cube closest to being solved?",
+            "instructions": "Which single move leaves this Rubik's cube the fewest moves away from solved?",
             "criteria": {m: move_description(m, state) for m in moves},
         }
     }
@@ -191,7 +229,8 @@ def llm_prompt(state: list, last_move: str | None, moves: list[str]) -> list[dic
                                       "line 'Final move: <code>' using one code from the allowed list."},
         {"role": "user", "content": state_text(state, last_move) + "\n\nAllowed moves:\n"
          + "\n".join(move_description(m, state) for m in moves)
-         + "\n\nWhich single move brings the cube closest to solved? End with 'Final move: <code>', e.g. Final move: R'"},
+         + "\n\nWhich single move leaves the cube the fewest moves away from solved? "
+           "End with 'Final move: <code>', e.g. Final move: R'"},
     ]
 
 

@@ -26,7 +26,9 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 
 * **Each face as a 3x3 grid of colours**, and which neighbouring face each edge of the grid touches ("Front face (green centre), seen from the front: its top row touches the top face…"). Without that, a list of nine colours doesn't say how the faces connect.
 * **The unfolded cube as letters** (W R G Y O B), for models that read pictures better than lists.
-* **Every allowed move with its effect**, read off the engine itself, so it can't be wrong: "R: turn the right face (red centre) a quarter turn clockwise (as seen from the right); its edge stickers on the neighbouring faces move front → top, top → back, back → bottom, bottom → front".
+* **Every allowed move with its exact effect**, read off the engine itself, so it can't be wrong. For example: "R: turn the right face (red centre) a quarter turn clockwise (as seen from the right); the face's own 9 stickers turn with it: its top row becomes its right column, … The 3 stickers next to it on each neighbouring face move: the front face's right column → the top face's right column; the top face's right column → the back face's left column (order reversed); …"
+* **A test proves the text is enough:** `tests/test_demos.py` applies every move using only its English description and gets exactly the engine's result on random cubes. Nothing a model needs is left implicit.
+* **No vague goal:** the question asks which move leaves the cube *the fewest moves away from solved*, and the "stickers in place" count is labelled as a rough guide (it can drop on the way to a solution).
 
 **The engine is checked against an independent solver.** For every one of the 18 moves, Kociemba's two-phase solver returns exactly the inverse move, and its solutions solve our scrambles (`tests/test_cube.py`, runs when `pip install kociemba` is available). So when a model struggles, the cube is not the problem.
 
