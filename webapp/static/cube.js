@@ -107,7 +107,9 @@ function makeLane(player) {
       el("div", { class: "stat" }, made, el("div", { class: "k", text: "moves made" })),
       el("div", { class: "stat" }, opt, el("div", { class: "k", text: "optimal moves" }))),
     el("h3", { class: "small muted", text: "Top choices for the last move" }), bars,
-    el("h3", { class: "small muted", style: "margin-top:.6rem", text: "Move history" }), history, err, raw);
+    el("h3", { class: "small muted", style: "margin-top:.6rem", text: "Move history",
+      title: "Colour = the perfect solver's grade (green optimal, amber neutral, red worse). The models never see it." }),
+    el("div", { class: "small muted", text: "colour = the solver's grade, never shown to the models" }), history, err, raw);
   if (rec && rec.steps[0] && rec.steps[0].model) model.textContent = rec.steps[0].model;
   const lane = { player, node, net, watch: new Stopwatch(watch.querySelector(".watch")), dist, made, opt, bars, history,
                  err, banner, model, rec, state: cube.state.slice(), last: null, steps: 0, optimal: 0, movesMade: [],

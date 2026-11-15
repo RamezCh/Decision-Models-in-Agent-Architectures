@@ -17,6 +17,7 @@ and the recorder, so every mode judges moves exactly the same way.
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import time
@@ -40,13 +41,13 @@ _TURN = {"": "a quarter turn clockwise", "'": "a quarter turn counter-clockwise"
 
 # Which edge of each face's 3x3 grid touches which neighbour (the engine's layout, every face seen
 # from outside). Spelled out because "as seen looking at the face" alone doesn't say how faces connect.
-FACE_EDGES = {
-    "U": ("seen from above", "back", "front", "left", "right"),
-    "F": ("seen from the front", "top", "bottom", "left", "right"),
-    "R": ("seen from the right", "top", "bottom", "front", "back"),
-    "B": ("seen from behind", "top", "bottom", "right", "left"),
-    "L": ("seen from the left", "top", "bottom", "back", "front"),
-    "D": ("seen from below", "front", "back", "left", "right"),
+FACE_EDGES = {   # how each grid is drawn: which side you look from, and one edge (the rest follows)
+    "U": "seen from above, back edge at the top",
+    "F": "seen from the front, top edge at the top",
+    "R": "seen from the right, front edge on the left",
+    "B": "seen from behind, right edge on the left",
+    "L": "seen from the left, back edge on the left",
+    "D": "seen from below, front edge at the top",
 }
 _ORDER = "UFRBLD"   # faces in the order the models read them
 
@@ -81,36 +82,34 @@ def _layer_flow(move: str) -> list[str]:
         tface = FACES[targets[0] // 9]
         tname, torder = _strip([t % 9 for t in targets])
         same = [t % 9 for t in targets] == torder
-        out.append(f"the {FACE_NAMES[f]} face's {name} → the {FACE_NAMES[tface]} face's {tname}"
-                   + ("" if same else " (order reversed)"))
+        out.append(f"{FACE_NAMES[f]} face's {name} → {FACE_NAMES[tface]} face's {tname}" + ("" if same else " (flipped)"))
+    # start the cycle at the first strip and follow it, so it reads as one chain
     return out
-
-
-def _own_face(move: str) -> str:
-    """What happens to the turned face's own grid, read off the engine's permutation."""
-    perm = MOVE_PERMS[move]
-    dest = {src: dst for dst, src in enumerate(perm)}
-    base = f_i(move[0]) * 9
-    parts = []
-    for cells in ([0, 1, 2], [2, 5, 8]):                 # its top row and its right column
-        name, _ = _strip(cells)
-        targets = [dest[base + c] - base for c in cells]
-        tname, torder = _strip(targets)
-        parts.append(f"its {name} becomes its {tname}" + ("" if targets == torder else " (order reversed)"))
-    return "the face's own 9 stickers turn with it: " + ", ".join(parts)
 
 
 def f_i(face: str) -> int:
     return FACES.index(face)
 
 
+_SHORT_TURN = {"": "clockwise", "'": "counter-clockwise", "2": "a half turn"}
+
+
+def move_label(move: str, state: list) -> str:
+    """Short and distinct: what CLM compares against (long, near-identical texts make it pick one favourite)."""
+    centre = COLOR_NAMES[state[f_i(move[0]) * 9 + 4]].lower()
+    return f"{move}: turn the {FACE_NAMES[move[0]]} face ({centre} centre) {_SHORT_TURN[move[1:]]}"
+
+
 def move_description(move: str, state: list) -> str:
-    face = move[0]
-    centre = COLOR_NAMES[state[f_i(face) * 9 + 4]].lower()
-    seen = FACE_EDGES[face][0].replace("seen ", "")
-    turn = _TURN[move[1:]] + ("" if move.endswith("2") else f" (as seen {seen})")
-    return (f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {turn}; {_own_face(move)}. "
-            f"The 3 stickers next to it on each neighbouring face move: {'; '.join(_layer_flow(move))}.")
+    """One line: the turn plus where the moving stickers go (read off the engine, so always right)."""
+    seen = FACE_EDGES[move[0]].split(",")[0].replace("seen ", "")
+    turn = "a half turn" if move.endswith("2") else f"{_SHORT_TURN[move[1:]]} as seen {seen}"
+    centre = COLOR_NAMES[state[f_i(move[0]) * 9 + 4]].lower()
+    return f"{move}: turn the {FACE_NAMES[move[0]]} face ({centre} centre) {turn}: " + "; ".join(_layer_flow(move)) + "."
+
+
+MOVES_HEADER = ("What each move does (the turned face's own stickers turn with it; \"flipped\" means the three "
+                "stickers land in reverse order):")
 
 
 def net_picture(state: list) -> str:
@@ -139,39 +138,45 @@ def state_key(state: list) -> bytes:
 
 
 def state_text(state: list, last_move: str | None) -> str:
-    lines = ["A Rubik's cube (3x3x3). Each face below is a 3x3 grid of sticker colours: rows from top to bottom, "
-             "columns from left to right, as seen looking straight at that face from outside the cube. "
-             "The centre sticker never moves and names the face's colour."]
+    """The cube for the models: six 3x3 colour grids, each with how it is drawn. Kept short on purpose."""
+    lines = ["A Rubik's cube. Goal: make every face a single colour.",
+             "Each face is a 3x3 grid of sticker colours, seen from outside the cube. "
+             "Its centre sticker never moves and gives the face its colour."]
     for face in _ORDER:
         fi = f_i(face)
         stickers = [COLOR_NAMES[c].lower() for c in state[fi * 9:fi * 9 + 9]]
-        seen, top, bottom, left, right = FACE_EDGES[face]
-        lines.append(f"{FACE_NAMES[face].capitalize()} face ({stickers[4]} centre), {seen}: its top row touches the "
-                     f"{top} face, bottom row the {bottom} face, left column the {left} face, right column the "
-                     f"{right} face.")
-        for r in range(3):
-            lines.append("  " + " ".join(stickers[r * 3:r * 3 + 3]))
-    lines.append("The same cube unfolded (W white, R red, G green, Y yellow, O orange, B blue; top face above the "
-                 "row left-front-right-back, bottom face below):")
-    lines += ["  " + ln for ln in net_picture(state).splitlines()]
-    lines.append(f"Stickers already matching their face's centre: {stickers_in_place(state)} of 54 "
-                 "(a rough guide only: on the way to the solution this number can go down).")
+        lines.append(f"{FACE_NAMES[face].capitalize()} face ({stickers[4]} centre), {FACE_EDGES[face]}:")
+        lines += ["  " + " ".join(stickers[r * 3:r * 3 + 3]) for r in range(3)]
     lines.append(f"Previous move: {last_move or 'none'}.")
-    lines.append("Goal: every face shows a single colour. Moves use standard notation: a letter turns that face "
-                 "a quarter turn clockwise as seen looking straight at that face from outside, ' is "
-                 "counter-clockwise, 2 is a half turn. Row and column names below refer to the face grids above "
-                 "(\"order reversed\" means the strip's first sticker lands in the other strip's last place).")
     return "\n".join(lines)
 
 
-def cube_question(state: list, moves: list[str]) -> dict:
-    return {
-        "next_move": {
-            "type": "choice",
-            "instructions": "Which single move leaves this Rubik's cube the fewest moves away from solved?",
-            "criteria": {m: move_description(m, state) for m in moves},
-        }
-    }
+def moves_text(state: list, moves: list[str]) -> str:
+    return "\n".join([MOVES_HEADER] + [move_description(m, state) for m in moves])
+
+
+# How CLM is asked (tools/tune_cube.py compares them). Same cube text for every design.
+CUBE_DESIGNS = {
+    "short": "cube + short move names as the answers",
+    "reference": "cube + what each move does (in the state), short move names as the answers",
+    "long": "cube + each answer spelled out with its full effect",
+}
+CUBE_DESIGN = os.getenv("CUBE_CLM_DESIGN", "short")
+QUESTION = "Which single move brings this Rubik's cube closest to solved (fewest moves left)?"
+
+
+def cube_request(state: list, last_move: str | None, moves: list[str], design: str | None = None) -> dict:
+    """The full System One request for one cube decision."""
+    design = design or CUBE_DESIGN
+    st = state_text(state, last_move)
+    if design == "reference":
+        st += "\n" + moves_text(state, moves)
+    criteria = {m: (move_description(m, state) if design == "long" else move_label(m, state)) for m in moves}
+    return {"state": st, "questions": {"next_move": {"type": "choice", "instructions": QUESTION, "criteria": criteria}}}
+
+
+def cube_question(state: list, moves: list[str]) -> dict:   # kept for older scripts
+    return cube_request(state, None, moves)["questions"]
 
 
 async def decide(player: str, state: list, last_move: str | None, client=None,
@@ -201,7 +206,7 @@ async def decide(player: str, state: list, last_move: str | None, client=None,
     if player not in ("jev", "clm"):
         raise ValueError(f"unknown player {player!r}")
 
-    request = {"state": state_text(state, last_move), "questions": cube_question(state, moves)}
+    request = cube_request(state, last_move, moves)
     res = await client.ask(player, request["state"], request["questions"])
     a = res.answers.get("next_move")
     return {
@@ -225,12 +230,12 @@ _MOVE_RX = re.compile(r"(?<![A-Za-z])([UDFBLR])(2|'|’)?(?![A-Za-z0-9])")
 def llm_prompt(state: list, last_move: str | None, moves: list[str]) -> list[dict]:
     return [
         {"role": "system", "content": "You are solving a Rubik's cube one move at a time. Think briefly about "
-                                      "what each candidate move does to the stickers, then end your reply with a "
-                                      "line 'Final move: <code>' using one code from the allowed list."},
-        {"role": "user", "content": state_text(state, last_move) + "\n\nAllowed moves:\n"
-         + "\n".join(move_description(m, state) for m in moves)
-         + "\n\nWhich single move leaves the cube the fewest moves away from solved? "
-           "End with 'Final move: <code>', e.g. Final move: R'"},
+                                      "what the candidate moves do, then end your reply with a line "
+                                      "'Final move: <code>' using one code from the list."},
+        {"role": "user", "content": state_text(state, last_move) + "\n\n" + moves_text(state, moves)
+         + "\n(Only these moves are allowed now: the rules forbid turning the same face twice in a row "
+           "and going back to an earlier position.)\n\n" + QUESTION
+         + " End with 'Final move: <code>', e.g. Final move: R'"},
     ]
 
 

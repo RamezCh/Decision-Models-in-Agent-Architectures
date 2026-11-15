@@ -450,7 +450,7 @@ def test_llm_cube_player_parses_moves(monkeypatch):
 
     class FakeLLM:
         async def chat(self, messages, **kw):
-            assert "Allowed moves" in messages[-1]["content"]
+            assert "What each move does" in messages[-1]["content"]
             return ChatResult(True, "U2", 1200.0, "bht/medium")
     monkeypatch.setattr(players, "_LLM", FakeLLM())
     from cube.scrambler import scramble_exact
@@ -572,19 +572,22 @@ def test_exchange_shows_what_clm_reads():
 
 
 def test_cube_text_matches_the_engine():
-    from agents.players import FACE_EDGES, _layer_flow, move_description, state_text
+    from agents.players import cube_request, move_description, move_label, state_text
     from cube.cube_state import apply_move, solved_state
     s = apply_move(solved_state(), "R")
     t = state_text(s, "R")
     # after R: front's right column is yellow (from the bottom), top's right column green (from the front)
-    assert "Front face (green centre), seen from the front" in t and "green green yellow" in t
-    assert "Top face (white centre), seen from above: its top row touches the back face" in t
-    assert set(FACE_EDGES) == set("UFRBLD")
+    assert "Front face (green centre), seen from the front, top edge at the top:\n  green green yellow" in t
+    assert "Top face (white centre), seen from above, back edge at the top:" in t and "Previous move: R." in t
     r = move_description("R", s)
-    assert "the front face's right column → the top face's right column;" in r
-    assert "the top face's right column → the back face's left column (order reversed)" in r
-    assert "the right face's top row → the front face's top row" in move_description("U", s)   # U: right comes to front
-    assert len(_layer_flow("R2")) == 4
+    assert "front face's right column → top face's right column;" in r
+    assert "top face's right column → back face's left column (flipped)" in r
+    assert move_label("F2", s) == "F2: turn the front face (green centre) a half turn"
+    # CLM's answers are short by default; the effects can go into the state ("reference" design)
+    short = cube_request(s, "R", ["U", "F2"])
+    assert short["questions"]["next_move"]["criteria"]["U"] == "U: turn the top face (white centre) clockwise"
+    assert "What each move does" in cube_request(s, "R", ["U"], design="reference")["state"]
+    assert "→" in cube_request(s, "R", ["U"], design="long")["questions"]["next_move"]["criteria"]["U"]
 
 
 def test_llm_move_parser_takes_the_final_answer():
@@ -603,7 +606,7 @@ def test_move_descriptions_alone_determine_the_next_state():
     face_of = {v: k for k, v in FACE_NAMES.items()}
     strip_cells = {"top row": [0, 1, 2], "middle row": [3, 4, 5], "bottom row": [6, 7, 8],
                    "left column": [0, 3, 6], "middle column": [1, 4, 7], "right column": [2, 5, 8]}
-    rx = re.compile(r"the (\w+) face's (\w+ \w+) → the (\w+) face's (\w+ \w+)( \(order reversed\))?")
+    rx = re.compile(r"(\w+) face's (\w+ \w+) → (\w+) face's (\w+ \w+)( \(flipped\))?")
 
     def from_text(state, move):
         text = move_description(move, state)
@@ -619,11 +622,10 @@ def test_move_descriptions_alone_determine_the_next_state():
         base = FACES.index(move[0]) * 9
         grid = [state[base + i] for i in range(9)]
         cw = [6, 3, 0, 7, 4, 1, 8, 5, 2]          # new[i] = old[cw[i]] for a clockwise quarter turn
-        turns = 1 if "a quarter turn clockwise" in text else 3 if "counter-clockwise" in text else 2
+        turns = 2 if "a half turn" in text else 3 if "counter-clockwise" in text else 1
         for _ in range(turns):
             grid = [grid[cw[i]] for i in range(9)]
         new[base:base + 9] = grid
-        assert ("top row becomes its right column" in text) == (turns == 1)
         return new
 
     rng = random.Random(5)

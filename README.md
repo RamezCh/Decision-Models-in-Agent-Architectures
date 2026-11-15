@@ -207,6 +207,7 @@ python tools/mock_system_one_server.py --port 8701 --name jev --latency-ms 120 &
 cd rubric-cube-demo && python -m runner.race --level 3        # live cube race in the terminal
 python tools/calibrate.py                                       # fit the scam calibration from the recordings (LOO metrics)
 python tools/tune_guard.py                                      # compare guard question designs on CLM (needs the tunnel)
+python tools/tune_cube.py                                       # compare cube question designs on CLM (needs the tunnel)
 python scam-detector-demo/evaluate.py                           # from the recordings: raw vs calibrated AUC and Brier
                                                                 # (leave-one-out), reliability tables, latency percentiles
 python tools/diagnose_clm.py                                    # CLM question-wording experiment (needs the tunnel)
@@ -225,7 +226,7 @@ beat-the-guard-demo/   README + screenshots; vault bot (BHT bht/medium, or scrip
 k8s/                   clm.yaml + README: CLM on one A100 in namespace vpdx3758, reachable only via port-forward
 webapp/                the web pages for all three demos: FastAPI app + static pages (no build step, no CDN: works offline in the lecture hall)
 docs/                  behind the scenes: how the models answer, wording, calibration, limits (diagrams + charts)
-tools/                 mock server, calibrate.py, tune_guard.py, diagnose_clm.py, make_doc_figures.py
+tools/                 mock server, calibrate.py, tune_guard.py, tune_cube.py, diagnose_clm.py, make_doc_figures.py
 ```
 
 ---

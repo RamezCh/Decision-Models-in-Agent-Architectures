@@ -22,13 +22,16 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 
 ## What happens under the hood
 
-**What the models read.** Every model gets the same text, built in `agents/players.py`:
+**What the models read.** Kept short on purpose (`agents/players.py`). Both models get the same cube text:
 
-* **Each face as a 3x3 grid of colours**, and which neighbouring face each edge of the grid touches ("Front face (green centre), seen from the front: its top row touches the top face…"). Without that, a list of nine colours doesn't say how the faces connect.
-* **The unfolded cube as letters** (W R G Y O B), for models that read pictures better than lists.
-* **Every allowed move with its exact effect**, read off the engine itself, so it can't be wrong. For example: "R: turn the right face (red centre) a quarter turn clockwise (as seen from the right); the face's own 9 stickers turn with it: its top row becomes its right column, … The 3 stickers next to it on each neighbouring face move: the front face's right column → the top face's right column; the top face's right column → the back face's left column (order reversed); …"
-* **A test proves the text is enough:** `tests/test_demos.py` applies every move using only its English description and gets exactly the engine's result on random cubes. Nothing a model needs is left implicit.
-* **No vague goal:** the question asks which move leaves the cube *the fewest moves away from solved*, and the "stickers in place" count is labelled as a rough guide (it can drop on the way to a solution).
+* **Six 3x3 grids of colour names**, each with one phrase that fixes how it is drawn ("Front face (green centre), seen from the front, top edge at the top"), plus the previous move.
+
+On top of that:
+
+* **Gemma (BHT Medium)** also gets one line per allowed move with where its stickers go, read off the engine, for example "R: turn the right face (red centre) clockwise as seen from the right: front face's right column → top face's right column; top face's right column → back face's left column (flipped); …". It may think it through and ends with "Final move: X".
+* **CLM** gets the moves as short, distinct answers ("R: turn the right face (red centre) clockwise"). It compares the cube text with each answer text, so long, near-identical answers made it pick the same favourite every turn (e.g. F2 over and over). `python tools/tune_cube.py` compares three ways of asking CLM on 21 cubes and also counts how many different moves it picks, so a stuck model shows up as a number. Switch with `CUBE_CLM_DESIGN` in `.env`.
+* **A test proves the move lines are enough:** applying every move using only its text reproduces the engine exactly on random cubes.
+* **The history colours** (green optimal, amber neutral, red worse) are the referee's grades for the audience. The models never see them; that would give the answer away.
 
 **The engine is checked against an independent solver.** For every one of the 18 moves, Kociemba's two-phase solver returns exactly the inverse move, and its solutions solve our scrambles (`tests/test_cube.py`, runs when `pip install kociemba` is available). So when a model struggles, the cube is not the problem.
 
