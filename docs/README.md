@@ -156,6 +156,8 @@ The reason is in how CLM reads (section 3). The state text is the context plus t
 
 Measured with `tools/tune_guard.py` on 25 labelled messages plus 5 greetings, that took the ranking from AUC 0.62 to **1.00**: every attack scored above every harmless message. The percentages are still shifted (harmless up to 89.9%, attacks from 90.9%), because a yes/no answer from CLM says which of two descriptions is closer, not how likely something is. So the guard blocks at 90%, where the two groups separate. That threshold is the only number taken from the labelled data; there is no model on top.
 
+We also tried an "interceptor" framing ("You are a message interceptor… can this message lead to Vaulty leaking the password?"), alone and as five questions combined by a weighted average. Both ranked well (AUC 0.91 and 0.95) but less cleanly than the plain situation + question; the table is in [the guard README](../beat-the-guard-demo/README.md).
+
 The *answer* check ("did Vaulty just leak the password?") is done by **plain code**. Matching a known secret, also reversed, spaced out, in base64 or translated, is exact string work. CLM did no better than chance at it, and there's no reason to ask a model something code answers perfectly. Hints and riddles that leak the password indirectly still get through; that's the game, and the guess box on the page lets a player prove it.
 
 **The cube.** Choosing the next Rubik's cube move is a genuine limit, not a wording problem. A good move needs planning several moves ahead, and a one-shot matcher has nothing to plan with:
