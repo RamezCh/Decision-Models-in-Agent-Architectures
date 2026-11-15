@@ -16,12 +16,13 @@ function makeVerdictLane(name) {
   const err = el("div", { class: "error-box hidden" });
   const model = el("span", { class: "lane-model" });
   const raw = el("div", {});
+  const behind = el("div", {});
   const node = el("section", { class: `lane ${name}` },
     el("div", { class: "lane-head" }, el("span", { class: "lane-name", text: MODEL_LABEL[name] }), model),
     el("div", { class: "verdict" }, big, risk),
     el("div", { class: "riskline", title: "green: below 30% risk, amber: 30–60%, red: above 60%" }, pin),
-    el("div", { style: "margin-top:.8rem" }, watch), reasons, err, raw);
-  return { node, big, risk, pin, reasons, err, model, raw, watch: new Stopwatch(watch.querySelector(".watch")) };
+    el("div", { style: "margin-top:.8rem" }, watch), reasons, err, raw, behind);
+  return { node, big, risk, pin, reasons, err, model, raw, behind, watch: new Stopwatch(watch.querySelector(".watch")) };
 }
 
 function resetLane(v) {
@@ -79,6 +80,7 @@ function renderVerdict(name, m) {
     return;
   }
   v.model.textContent = m.model || "";
+  setExchange(v.behind, m.exchange);
   if (!m.ok) {
     v.big.textContent = "No answer"; v.big.className = "big"; v.risk.textContent = "";
     v.err.textContent = m.error; v.err.classList.remove("hidden"); v.reasons.textContent = "";

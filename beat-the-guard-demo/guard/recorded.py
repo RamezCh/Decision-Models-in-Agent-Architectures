@@ -9,6 +9,7 @@ honest: it re-decides on the recorded scores, it doesn't invent new ones.
 
 from __future__ import annotations
 
+from system_one.exchange import exchange_from_call
 from system_one.recordings import load_sessions, session_meta
 
 from .game import DEFAULT_DEFENDER, DEFENDERS, MODELS, QUESTIONS_VERSION, answers_view, build_verdicts, outcome_for
@@ -34,9 +35,12 @@ def latest() -> dict[str, dict[str, dict]]:
 
 def _view(call: dict) -> dict:
     if not call.get("ok"):
-        return {"ok": False, "error": call.get("error"), "model": call.get("model"),
-                "input_ms": call.get("latency_ms"), "server_ms": call.get("server_ms")}
-    return answers_view(call["answers"], call.get("model"), call["latency_ms"], call.get("server_ms"))
+        v = {"ok": False, "error": call.get("error"), "model": call.get("model"),
+             "input_ms": call.get("latency_ms"), "server_ms": call.get("server_ms")}
+    else:
+        v = answers_view(call["answers"], call.get("model"), call["latency_ms"], call.get("server_ms"))
+    v["exchange"] = exchange_from_call(call)
+    return v
 
 
 def catalog() -> dict:

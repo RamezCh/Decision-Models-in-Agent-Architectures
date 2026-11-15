@@ -30,6 +30,7 @@ from pathlib import Path
 
 from system_one.calibration import predict_combined
 from system_one.client import demo_models
+from system_one.exchange import exchange
 
 # Models this demo asks. CLM only by default; SCAM_MODELS=jev,clm in .env compares both.
 MODELS = demo_models("scam")
@@ -180,9 +181,10 @@ def combine(probs: dict[str, float], model: str | None = None) -> dict:
 
 
 def model_entry(ok: bool, probs: dict[str, float] | None, latency_ms: float, server_ms=None,
-                model=None, error=None, provider: str | None = None) -> dict:
+                model=None, error=None, provider: str | None = None, exchange: dict | None = None) -> dict:
     """One model's analysis from its raw yes/no probabilities (live or recorded)."""
-    entry = {"ok": ok, "error": error, "latency_ms": latency_ms, "server_ms": server_ms, "model": model}
+    entry = {"ok": ok, "error": error, "latency_ms": latency_ms, "server_ms": server_ms, "model": model,
+             "exchange": exchange}
     if ok and probs:
         entry["flags"] = {f["id"]: probs[f["id"]] for f in RED_FLAGS}
         entry["overall"] = probs[OVERALL["id"]]
@@ -208,10 +210,13 @@ def assemble(models: dict[str, dict]) -> dict:
 
 async def analyze_listing(client, listing: dict) -> dict:
     """Live: ask the demo's models (in parallel if more than one) and combine each model's answers."""
-    results = await client.compare(listing_state(listing), questions(), MODELS)
+    state, qs = listing_state(listing), questions()
+    results = await client.compare(state, qs, MODELS)
     return assemble({
         name: model_entry(res.ok, {k: a.value for k, a in res.answers.items()}, res.latency_ms,
-                          res.server_ms, res.model, res.error, provider=name)
+                          res.server_ms, res.model, res.error, provider=name,
+                          exchange=exchange(name, state, qs, res.answers, res.latency_ms, res.server_ms,
+                                            res.model, res.error))
         for name, res in results.items()
     })
 

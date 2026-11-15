@@ -43,6 +43,8 @@ from pathlib import Path
 
 from system_one.client import demo_models
 
+from system_one.exchange import exchange
+
 from .designs import DESIGNS
 from .vault_bot import DEFAULT_LEVEL, LEVELS, VaultBot, normalized_leak
 
@@ -112,7 +114,7 @@ def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: flo
             continue
         if not v["ok"]:
             verdicts[name] = {"ok": False, "error": v["error"], "blocked": False, "latency_ms": v.get("input_ms"),
-                              "model": v.get("model")}
+                              "model": v.get("model"), "exchange": v.get("exchange")}
             continue
         p_in = v["attack"]                          # CLM's own probability, nothing fitted on top
         verdicts[name] = {
@@ -120,7 +122,7 @@ def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: flo
             "output_p": float(leak),
             "blocked_input": p_in >= threshold, "blocked_output": leak,
             "blocked": p_in >= threshold or leak,
-            "parts": v.get("parts"), "design": DESIGN.describe,
+            "parts": v.get("parts"), "design": DESIGN.describe, "exchange": v.get("exchange"),
             "latency_ms": v["input_ms"], "server_ms": v.get("server_ms"),
             "model": v.get("model"), "error": None,
         }
@@ -188,7 +190,12 @@ class GuardGame:
         # the message check runs at the same time as the bot answers
         in_res, (bot, bot_ms) = await asyncio.gather(
             self.client.compare(guard_state(text), INPUT_QUESTIONS, MODELS), self._reply(text, level))
+        state = guard_state(text)
         views = {n: model_view(in_res[n]) for n in MODELS}
+        for n in MODELS:          # behind the scenes: what was sent, what CLM read, what came back
+            r = in_res[n]
+            views[n]["exchange"] = exchange(n, state, INPUT_QUESTIONS, r.answers, r.latency_ms, r.server_ms,
+                                            r.model, r.error)
         verdicts = build_verdicts(text, bot["reply"], views, threshold)
         leaked = bool(bot["leaked"])
 

@@ -12,6 +12,66 @@ let speed = null;   // SpeedBoard: response time per move, per model
 
 let level = 3, cube = null, running = false, lanes = {}, mode = "live", catalog = null;
 
+// ── 3D view ──────────────────────────────────────────────────────────────
+// Each face is a 3x3 grid in the engine's sticker order (Kociemba layout, every face seen from
+// outside). The CSS transform per face puts row 0 / column 0 on the same edge the engine uses:
+//   U: rows run back->front, cols left->right     D: rows run front->back, cols left->right
+//   F: rows top->bottom, cols left->right         B: rows top->bottom, cols right->left
+//   R: rows top->bottom, cols front->back         L: rows top->bottom, cols back->front
+const FACE_3D = ["U", "R", "F", "D", "L", "B"];
+let viewMode = "3d";
+const view3d = { rx: -28, ry: -38 };   // shared by all lanes, so every cube is seen from the same side
+
+function render3D(container, state, turnedFace = null) {
+  let cubeEl = container.querySelector(".cube3d");
+  if (!cubeEl) {
+    cubeEl = el("div", { class: "cube3d" });
+    for (let f = 0; f < 6; f++) {
+      const face = el("div", { class: `face3d f${FACE_3D[f]}` });
+      for (let i = 0; i < 9; i++) face.append(el("div", { class: "s" }));
+      cubeEl.append(face);
+    }
+    container.replaceChildren(el("div", { class: "scene3d" }, cubeEl));
+    enableDrag(container);
+  }
+  cubeEl.style.transform = `rotateX(${view3d.rx}deg) rotateY(${view3d.ry}deg)`;
+  cubeEl.querySelectorAll(".face3d").forEach((face, f) => {
+    face.classList.toggle("turned", f === turnedFace);
+    face.querySelectorAll(".s").forEach((st, i) => { st.className = `s c${state[f * 9 + i]}`; });
+  });
+}
+
+function enableDrag(container) {
+  let start = null;
+  container.addEventListener("pointerdown", (e) => { start = { x: e.clientX, y: e.clientY, ...view3d };
+    container.setPointerCapture(e.pointerId); });
+  container.addEventListener("pointermove", (e) => {
+    if (!start) return;
+    view3d.ry = start.ry + (e.clientX - start.x) * 0.6;
+    view3d.rx = Math.max(-89, Math.min(89, start.rx - (e.clientY - start.y) * 0.6));
+    document.querySelectorAll(".cube3d").forEach(c => { c.style.transform = `rotateX(${view3d.rx}deg) rotateY(${view3d.ry}deg)`; });
+  });
+  const end = () => { start = null; };
+  container.addEventListener("pointerup", end);
+  container.addEventListener("pointercancel", end);
+}
+
+function renderCube(container, state, turnedFace = null) {
+  container.classList.toggle("net", viewMode === "2d");
+  container.classList.toggle("view3d", viewMode === "3d");
+  if (viewMode === "3d") return render3D(container, state, turnedFace);
+  renderNet(container, state, turnedFace);
+}
+
+function setView(mode) {
+  viewMode = mode;
+  document.querySelectorAll("#viewMode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === mode)));
+  for (const lane of Object.values(lanes)) {
+    lane.net.replaceChildren();
+    renderCube(lane.net, lane.state, lane.last ? FACE_OF_MOVE[lane.last[0]] : null);
+  }
+}
+
 function renderNet(container, state, turnedFace = null) {
   const cells = Array.from({ length: 108 }, () => el("div", { class: "gap" }));
   for (let f = 0; f < 6; f++) {
@@ -26,7 +86,7 @@ function renderNet(container, state, turnedFace = null) {
 }
 
 function makeLane(player) {
-  const net = el("div", { class: "net", role: "img", "aria-label": "Unfolded cube" });
+  const net = el("div", { class: "cube-view", role: "img", "aria-label": "The cube (drag to rotate in 3D)" });
   const watch = watchMarkup("thinking time for the last move");
   const dist = el("div", { class: "v", text: level });
   const made = el("div", { class: "v", text: "0" });
@@ -52,7 +112,7 @@ function makeLane(player) {
   const lane = { player, node, net, watch: new Stopwatch(watch.querySelector(".watch")), dist, made, opt, bars, history,
                  err, banner, model, rec, state: cube.state.slice(), last: null, steps: 0, optimal: 0, movesMade: [],
                  series: [level], solved: false };
-  renderNet(net, lane.state);
+  renderCube(net, lane.state);
   return lane;
 }
 
@@ -156,7 +216,7 @@ async function playLane(lane, maxSteps) {
     lane.steps++; lane.last = res.move; lane.state = res.state_after; lane.movesMade.push(res.move);
     if (res.verdict === "optimal") lane.optimal++;
     lane.series.push(res.distance_after);
-    renderNet(lane.net, lane.state, FACE_OF_MOVE[res.move[0]]);
+    renderCube(lane.net, lane.state, FACE_OF_MOVE[res.move[0]]);
     lane.dist.textContent = res.distance_after == null ? "7+" : res.distance_after;
     lane.made.textContent = lane.steps;
     lane.opt.textContent = pct(lane.optimal / lane.steps);
@@ -298,6 +358,7 @@ function applyMode(m) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  document.querySelectorAll("#viewMode button").forEach(b => b.addEventListener("click", () => setView(b.dataset.v)));
   speed = new SpeedBoard("speedBoard", { unit: "move" });
   document.getElementById("speedClear").addEventListener("click", () => speed.clear());
   const lp = logPanel("decisionLog", "Decision log",

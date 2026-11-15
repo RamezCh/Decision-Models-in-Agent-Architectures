@@ -12,7 +12,7 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 ## What the audience sees
 
 * **One lane per player**, always in the same colour: Jev indigo, CLM teal, BHT Medium (optional chat LLM) pink, random grey, perfect solver gold.
-* **The unfolded cube** after every move, with the face that was just turned outlined.
+* **The cube in 3D** (drag to rotate, all lanes turn together) or **unfolded in 2D**, after every move, with the face that was just turned outlined.
 * **A stopwatch** counting while the model "thinks", then freezing on the measured time.
 * **Every move graded** by the referee: <code>optimal</code> (one step closer, the best possible), <code>neutral</code> (no progress), <code>worse</code> (further away).
 * **The top 3 choices** with probabilities, so you can see how sure the model was.
@@ -21,6 +21,17 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 ![Summary over all recorded cubes, and the distance-to-solved chart](docs/summary-and-chart.png)
 
 ## What happens under the hood
+
+**What the models read.** Every model gets the same text, built in `agents/players.py`:
+
+* **Each face as a 3x3 grid of colours**, and which neighbouring face each edge of the grid touches ("Front face (green centre), seen from the front: its top row touches the top face…"). Without that, a list of nine colours doesn't say how the faces connect.
+* **The unfolded cube as letters** (W R G Y O B), for models that read pictures better than lists.
+* **Every allowed move with its effect**, read off the engine itself, so it can't be wrong: "R: turn the right face (red centre) a quarter turn clockwise (as seen from the right); its edge stickers on the neighbouring faces move front → top, top → back, back → bottom, bottom → front".
+
+**The engine is checked against an independent solver.** For every one of the 18 moves, Kociemba's two-phase solver returns exactly the inverse move, and its solutions solve our scrambles (`tests/test_cube.py`, runs when `pip install kociemba` is available). So when a model struggles, the cube is not the problem.
+
+**The LLM player** (BHT Medium) may think out loud, then ends with "Final move: X". The app takes that final move, not the first move it mentions.
+
 
 ```mermaid
 flowchart LR

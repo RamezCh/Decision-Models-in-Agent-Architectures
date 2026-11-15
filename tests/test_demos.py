@@ -555,3 +555,37 @@ def test_vault_levels_and_measured_threshold(tmp_path):
     designs.apply_measured_thresholds(f)
     assert d.threshold == 0.873 and d.threshold_source.startswith("measured")
     assert designs.DESIGNS["context_noul"].threshold == before
+
+
+def test_exchange_shows_what_clm_reads():
+    from system_one.exchange import clm_reads, exchange
+    st = {"title": "Flat", "rent": 500}
+    qs = {"q": {"type": "noul", "instructions": "Is it a scam?", "criteria": {"true": "Scam.", "false": "Fine."}},
+          "d": {"type": "noul", "instructions": "Is it cheap?"}}
+    r = clm_reads(st, qs)
+    assert r["context"] == "title: Flat\n\nrent: 500"
+    assert r["questions"]["q"]["candidates"] == {"false": "false: Fine.", "true": "true: Scam."}
+    assert r["questions"]["d"]["candidates"]["true"] == "true: Yes. This is true: Is it cheap?"   # CLM's default
+    ex = exchange("clm", st, qs, {"q": {"value": 0.7, "probabilities": {"true": 0.7, "false": 0.3}}}, 12.0)
+    assert ex["request"]["state"] == st and ex["response"]["answers"]["q"]["probabilities"]["true"] == 0.7
+    assert exchange("jev", st, qs, {})["reads"] is None
+
+
+def test_cube_text_matches_the_engine():
+    from agents.players import FACE_EDGES, _layer_flow, move_description, state_text
+    from cube.cube_state import apply_move, solved_state
+    s = apply_move(solved_state(), "R")
+    t = state_text(s, "R")
+    # after R: front's right column is yellow (from the bottom), top's right column green (from the front)
+    assert "Front face (green centre), seen from the front" in t and "green green yellow" in t
+    assert "Top face (white centre), seen from above: its top row touches the back face" in t
+    assert set(FACE_EDGES) == set("UFRBLD")
+    assert "front → top" in move_description("R", s) and "top → back" in move_description("R", s)
+    assert "right → front" in move_description("U", s)          # U clockwise: right face's top row comes to the front
+    assert sorted(_layer_flow("R2")) == sorted(["top → bottom", "front → back", "bottom → top", "back → front"])
+
+
+def test_llm_move_parser_takes_the_final_answer():
+    from agents.players import parse_move
+    assert parse_move("R would undo it, U2 does nothing. Final move: **F'**", ["R", "U2", "F'"]) == "F'"
+    assert parse_move("Not R. Better U2.", ["R", "U2"]) == "U2"          # no 'Final move': the last one named

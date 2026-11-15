@@ -22,6 +22,8 @@ The audience tries to trick Vaulty, a chatbot that knows a secret password, into
 * **"Guess the password"**: if Vaulty only gave a hint or a translation, type your guess to prove you really cracked it. A correct guess opens the vault and is marked on the leaderboard. Wrong guesses only tell you the length, so guessing never replaces beating the guard.
 * **A speed panel**, a **decision log** (every message × every guard: P(attack), answer check, what the guard did, whether that was right; downloadable as CSV), a **scoreboard** per guard and a **leaderboard** of players.
 
+**Behind the scenes** (collapsible, under each model's verdict, live and recorded): the request as sent, the exact text CLM reads (the state turned into `key: value` prose, the same function as CLM's own code), the question with every candidate answer text and the probability CLM gave it, and the raw response with timing.
+
 ## What happens under the hood
 
 > The theory, with diagrams and the real measurements behind these choices, is in [docs/README.md](../docs/README.md).

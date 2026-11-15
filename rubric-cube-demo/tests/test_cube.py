@@ -3,6 +3,7 @@
 Run from the rubric-cube-demo folder:  python -m pytest tests
 """
 
+import pytest
 import sys
 import unittest
 from pathlib import Path
@@ -113,3 +114,16 @@ class TestOracle(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_moves_match_the_reference_solver():
+    """Independent check: Kociemba's two-phase solver must solve our scrambles with our moves."""
+    import random
+    kociemba = pytest.importorskip("kociemba")
+    from cube.cube_state import ALL_MOVES, apply_move, apply_moves, inverse_move, is_solved, solved_state, to_facelet_string
+    for m in ALL_MOVES:
+        assert kociemba.solve(to_facelet_string(apply_move(solved_state(), m))).split() == [inverse_move(m)]
+    rng = random.Random(7)
+    for _ in range(30):
+        s = apply_moves(solved_state(), [rng.choice(ALL_MOVES) for _ in range(25)])
+        assert is_solved(apply_moves(s, kociemba.solve(to_facelet_string(s)).split()))

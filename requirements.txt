@@ -7,3 +7,4 @@ python-dotenv>=1.0
 scikit-learn>=1.3
 # tests
 pytest>=8
+# kociemba    # optional: lets tests/test_cube.py check the engine against Kociemba's solver

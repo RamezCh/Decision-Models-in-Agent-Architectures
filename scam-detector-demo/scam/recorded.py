@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import statistics
 
+from system_one.exchange import exchange_from_call
 from system_one.recordings import load_sessions, session_meta
 
 from .detector import MODELS, OVERALL, QUESTIONS_VERSION, assemble, combine, listing_hash, load_examples, model_entry
@@ -45,7 +46,8 @@ def _probs(call: dict) -> dict[str, float]:
 
 def _entry(call: dict) -> dict:
     return model_entry(bool(call.get("ok")), _probs(call), call.get("latency_ms", 0.0),
-                       call.get("server_ms"), call.get("model"), call.get("error"), provider=call.get("provider"))
+                       call.get("server_ms"), call.get("model"), call.get("error"), provider=call.get("provider"),
+                       exchange=exchange_from_call(call))
 
 
 def replay_listing(listing_id: str) -> dict | None:

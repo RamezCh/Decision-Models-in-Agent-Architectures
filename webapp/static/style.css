@@ -269,3 +269,41 @@ input[type=range] { width: 100%; accent-color: var(--ink); }
 .guess-ok { color: var(--good); font-weight: 600; }
 .guess-no { color: var(--muted); }
 .vault.open { color: var(--good); font-weight: 700; letter-spacing: .08em; }
+
+/* 3D cube (CSS transforms; face orientation matches the engine's sticker layout) */
+.cube-view.view3d { --st: 30px; --half: calc(var(--st) * 1.5 + 3px); height: calc(var(--st) * 6.2); display: grid;
+  place-items: center; cursor: grab; touch-action: none; user-select: none; margin: .3rem auto 0; }
+.cube-view.view3d:active { cursor: grabbing; }
+.scene3d { perspective: 700px; width: calc(var(--half) * 2); height: calc(var(--half) * 2); }
+.cube3d { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .05s linear; }
+.face3d { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px;
+  background: #1b1d22; border-radius: 6px; backface-visibility: hidden; }
+.face3d .s { border-radius: 4px; border: none; }
+.face3d.turned { box-shadow: 0 0 0 3px var(--ink); }
+.face3d.fF { transform: translateZ(var(--half)); }
+.face3d.fB { transform: rotateY(180deg) translateZ(var(--half)); }
+.face3d.fR { transform: rotateY(90deg) translateZ(var(--half)); }
+.face3d.fL { transform: rotateY(-90deg) translateZ(var(--half)); }
+.face3d.fU { transform: rotateX(90deg) translateZ(var(--half)); }
+.face3d.fD { transform: rotateX(-90deg) translateZ(var(--half)); }
+
+/* behind the scenes (request / what CLM reads / response) */
+details.behind { margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .5rem; font-size: .85rem; }
+details.behind > summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+details.behind[open] > summary { color: var(--ink); margin-bottom: .4rem; }
+.behind-h { font-weight: 600; margin: .7rem 0 .3rem; }
+.behind-pre { white-space: pre-wrap; word-break: break-word; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 8px; padding: .55rem .7rem; max-height: 260px; overflow: auto; font-size: .78rem; margin: 0; }
+.behind-q { margin: .5rem 0 .8rem; }
+.behind-qtitle { margin-bottom: .3rem; }
+.behind-qtitle code { font-size: .78rem; background: var(--paper); padding: 0 .3rem; border-radius: 4px; }
+.behind-table { width: 100%; border-collapse: collapse; }
+.behind-table td { padding: .25rem .35rem; border-top: 1px solid var(--line); vertical-align: top; }
+.behind-table tr.chosen td { font-weight: 600; }
+.behind-cand { font-size: .8rem; }
+.behind-p { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; width: 8.5rem; }
+.behind-bar { display: inline-block; width: 3.5rem; height: .45rem; background: var(--line); border-radius: 4px;
+  vertical-align: middle; overflow: hidden; }
+.behind-bar > span { display: block; height: 100%; background: var(--ink); }
+details.behind-raw { margin-top: .4rem; }
+details.behind-raw > summary { cursor: pointer; color: var(--muted); }

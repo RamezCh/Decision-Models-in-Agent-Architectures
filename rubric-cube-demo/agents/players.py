@@ -23,8 +23,8 @@ import time
 from dataclasses import asdict
 from typing import Any, Callable
 
-from cube.cube_state import (ALL_MOVES, COLOR_NAMES, FACE_NAMES, FACES, apply_move, is_solved,
-                             stickers_in_place)
+from cube.cube_state import (ALL_MOVES, COLOR_NAMES, FACE_NAMES, FACES, MOVE_PERMS, apply_move, is_solved,
+                             render_state, stickers_in_place)
 from cube.oracle import evaluate_moves
 from system_one.llm import ChatLLM
 
@@ -38,11 +38,49 @@ PLAYERS = {
 
 _TURN = {"": "a quarter turn clockwise", "'": "a quarter turn counter-clockwise", "2": "a half turn (180°)"}
 
+# Which edge of each face's 3x3 grid touches which neighbour (the engine's layout, every face seen
+# from outside). Spelled out because "as seen looking at the face" alone doesn't say how faces connect.
+FACE_EDGES = {
+    "U": ("seen from above", "back", "front", "left", "right"),
+    "F": ("seen from the front", "top", "bottom", "left", "right"),
+    "R": ("seen from the right", "top", "bottom", "front", "back"),
+    "B": ("seen from behind", "top", "bottom", "right", "left"),
+    "L": ("seen from the left", "top", "bottom", "back", "front"),
+    "D": ("seen from below", "front", "back", "left", "right"),
+}
+_ORDER = "UFRBLD"   # faces in the order the models read them
+
+
+def _layer_flow(move: str) -> list[str]:
+    """Where the turning layer's side stickers go, read off the engine's permutation (correct by construction)."""
+    perm = MOVE_PERMS[move]
+    dest = {src: dst for dst, src in enumerate(perm)}
+    flow = {}
+    for f in FACES:
+        if f == move[0]:
+            continue
+        moved = [i for i in range(f_i(f) * 9, f_i(f) * 9 + 9) if dest[i] != i]
+        if moved:
+            flow[f] = FACES[dest[moved[0]] // 9]
+    return [f"{FACE_NAMES[a]} → {FACE_NAMES[b]}" for a, b in flow.items()]
+
+
+def f_i(face: str) -> int:
+    return FACES.index(face)
+
 
 def move_description(move: str, state: list) -> str:
     face = move[0]
-    centre = COLOR_NAMES[state[FACES.index(face) * 9 + 4]].lower()
-    return f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {_TURN[move[1:]]}"
+    centre = COLOR_NAMES[state[f_i(face) * 9 + 4]].lower()
+    seen = FACE_EDGES[face][0].replace("seen ", "")
+    turn = _TURN[move[1:]] + ("" if move.endswith("2") else f" (as seen {seen})")
+    return (f"{move}: turn the {FACE_NAMES[face]} face ({centre} centre) {turn}; "
+            f"its edge stickers on the neighbouring faces move {', '.join(_layer_flow(move))}")
+
+
+def net_picture(state: list) -> str:
+    """The unfolded cube as letters (W R G Y O B), top face above, bottom face below."""
+    return render_state(state)
 
 
 def legal_moves(last_move: str | None, constrain: bool = True, state: list | None = None,
@@ -66,16 +104,25 @@ def state_key(state: list) -> bytes:
 
 
 def state_text(state: list, last_move: str | None) -> str:
-    lines = ["A Rubik's cube. Each face is a 3x3 grid of sticker colours, "
-             "as seen when looking straight at that face."]
-    for fi, face in enumerate(FACES):
+    lines = ["A Rubik's cube (3x3x3). Each face below is a 3x3 grid of sticker colours: rows from top to bottom, "
+             "columns from left to right, as seen looking straight at that face from outside the cube. "
+             "The centre sticker never moves and names the face's colour."]
+    for face in _ORDER:
+        fi = f_i(face)
         stickers = [COLOR_NAMES[c].lower() for c in state[fi * 9:fi * 9 + 9]]
-        lines.append(f"{FACE_NAMES[face].capitalize()} face ({stickers[4]} centre):")
+        seen, top, bottom, left, right = FACE_EDGES[face]
+        lines.append(f"{FACE_NAMES[face].capitalize()} face ({stickers[4]} centre), {seen}: its top row touches the "
+                     f"{top} face, bottom row the {bottom} face, left column the {left} face, right column the "
+                     f"{right} face.")
         for r in range(3):
             lines.append("  " + " ".join(stickers[r * 3:r * 3 + 3]))
+    lines.append("The same cube unfolded (W white, R red, G green, Y yellow, O orange, B blue; top face above the "
+                 "row left-front-right-back, bottom face below):")
+    lines += ["  " + ln for ln in net_picture(state).splitlines()]
     lines.append(f"Stickers already matching their face's centre: {stickers_in_place(state)} of 54.")
     lines.append(f"Previous move: {last_move or 'none'}.")
-    lines.append("Goal: solve the cube so every face shows a single colour.")
+    lines.append("Goal: solve the cube so every face shows a single colour. Moves use standard notation: "
+                 "a letter turns that face clockwise as seen looking at that face, ' is counter-clockwise, 2 is a half turn.")
     return "\n".join(lines)
 
 
@@ -139,20 +186,27 @@ _MOVE_RX = re.compile(r"(?<![A-Za-z])([UDFBLR])(2|'|’)?(?![A-Za-z0-9])")
 
 def llm_prompt(state: list, last_move: str | None, moves: list[str]) -> list[dict]:
     return [
-        {"role": "system", "content": "You are solving a Rubik's cube one move at a time. "
-                                      "Reply with exactly one move code from the allowed list and nothing else."},
+        {"role": "system", "content": "You are solving a Rubik's cube one move at a time. Think briefly about "
+                                      "what each candidate move does to the stickers, then end your reply with a "
+                                      "line 'Final move: <code>' using one code from the allowed list."},
         {"role": "user", "content": state_text(state, last_move) + "\n\nAllowed moves:\n"
          + "\n".join(move_description(m, state) for m in moves)
-         + "\n\nWhich single move brings the cube closest to solved? Answer with the move code only, e.g. R'"},
+         + "\n\nWhich single move brings the cube closest to solved? End with 'Final move: <code>', e.g. Final move: R'"},
     ]
 
 
+_FINAL_RX = re.compile(r"final\s+move\W{0,6}([UDFBLR])(2|'|’)?(?![A-Za-z0-9])", re.I)
+
+
 def parse_move(text: str, moves: list[str]) -> str | None:
-    """The first allowed move code in the reply (an LLM writes text, so we have to parse it)."""
-    for m in _MOVE_RX.finditer(text or ""):
-        move = m.group(1) + (m.group(2) or "").replace("’", "'")
-        if move in moves:
-            return move
+    """The move the LLM settled on: the last 'Final move: X', else the last allowed move code it wrote
+    (it may discuss moves it rejects first, so the first code mentioned is not the answer)."""
+    text = text or ""
+    for rx in (_FINAL_RX, _MOVE_RX):
+        found = [m.group(1) + (m.group(2) or "").replace("’", "'") for m in rx.finditer(text)]
+        found = [f for f in found if f in moves]
+        if found:
+            return found[-1]
     return None
 
 
@@ -161,7 +215,7 @@ async def _llm_decide(state: list, last_move: str | None, moves: list[str]) -> d
     global _LLM
     _LLM = _LLM or ChatLLM()
     messages = llm_prompt(state, last_move, moves)
-    res = await _LLM.chat(messages, max_tokens=1024, temperature=0.2)
+    res = await _LLM.chat(messages, max_tokens=1500, temperature=0.2)
     move = parse_move(res.text, moves) if res.ok else None
     error = res.error if not res.ok else (None if move else f"no allowed move in the reply: {res.text[:80]!r}")
     return {"ok": move is not None, "move": move, "probabilities": {}, "confidence": None,

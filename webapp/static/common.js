@@ -311,3 +311,56 @@ function logPanel(id, title, hint) {
     hint ? el("p", { class: "small muted", style: "margin:.2rem 0 .6rem", text: hint }) : null, box);
   return { section, box, clear, dl };
 }
+
+// ── Behind the scenes ─────────────────────────────────────────────────────
+// One model call, opened up: the state and questions we sent, the exact texts CLM compared
+// (state as prose + question, one text per possible answer) and the probability of each answer.
+// `container` keeps the panel open across updates if the user opened it.
+
+function setExchange(container, ex) {
+  const wasOpen = !!container.querySelector("details.behind[open]");
+  container.replaceChildren(ex ? exchangePanel(ex, wasOpen) : "");
+}
+
+function exchangePanel(ex, open = false) {
+  const label = MODEL_LABEL[ex.provider] || ex.provider;
+  const answers = (ex.response && ex.response.answers) || {};
+  const qs = (ex.request && ex.request.questions) || {};
+  const reads = ex.reads;
+  const body = [];
+  if (ex.response && ex.response.error) body.push(el("div", { class: "error-box", text: `No answer: ${ex.response.error}` }));
+  body.push(el("p", { class: "small muted", text: reads
+    ? `${label} never sees the JSON. It turns the state into the text below, adds each question after a blank line, ` +
+      "and compares that with one text per possible answer. The closer an answer's text, the higher its probability."
+    : `The request ${label} received and what it answered.` }));
+  if (reads) {
+    body.push(el("div", { class: "behind-h", text: "What it reads first (the state as text)" }),
+              el("pre", { class: "behind-pre", text: reads.context || "(empty)" }));
+  }
+  body.push(el("div", { class: "behind-h", text: `${Object.keys(qs).length} question${Object.keys(qs).length === 1 ? "" : "s"}, ` +
+    "each answered against that same text" }));
+  for (const [qid, q] of Object.entries(qs)) {
+    const a = answers[qid] || {};
+    const probs = a.probabilities || {};
+    const cands = reads ? reads.questions[qid].candidates : Object.fromEntries(Object.keys(probs).map(k => [k, k]));
+    const rows = Object.entries(cands).map(([k, text]) => ({ k, text, p: probs[k] }))
+      .sort((x, y) => (y.p ?? -1) - (x.p ?? -1));
+    const chosen = a.label ?? a.value;
+    body.push(el("div", { class: "behind-q" },
+      el("div", { class: "behind-qtitle" }, el("code", { text: qid }), ` ${q.instructions || ""} `,
+        el("span", { class: "muted", text: `(${q.type})` })),
+      el("table", { class: "behind-table" }, el("tbody", {}, ...rows.map(r => el("tr", { class: String(r.k) === String(chosen) ? "chosen" : "" },
+        el("td", { class: "behind-cand", text: r.text }),
+        el("td", { class: "behind-p" }, r.p == null ? "–" : el("span", {},
+          el("span", { class: "behind-bar" }, el("span", { style: `width:${(r.p * 100).toFixed(1)}%` })),
+          ` ${(r.p * 100).toFixed(1)}%`))))))));
+  }
+  const pretty = (o) => JSON.stringify(o, null, 2);
+  body.push(el("details", { class: "behind-raw" }, el("summary", { text: "Request as sent (JSON)" }),
+                el("pre", { class: "behind-pre", text: pretty(ex.request) })),
+            el("details", { class: "behind-raw" }, el("summary", { text: "Response (answers as received, with timing)" }),
+                el("pre", { class: "behind-pre", text: pretty(ex.response) })));
+  const d = el("details", { class: "behind" }, el("summary", { text: `Behind the scenes: what ${label} got and answered` }), ...body);
+  d.open = open;
+  return d;
+}

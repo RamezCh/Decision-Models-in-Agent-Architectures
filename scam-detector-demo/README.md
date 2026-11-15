@@ -17,6 +17,8 @@ Paste a flat listing, or pick one of 30 examples. Instead of one big "scam or no
 * **"Reveal the correct answer"**: the list is shuffled and the label is hidden, so the audience can guess first.
 * **A speed panel** (average, median, 95th percentile, model vs network time) and a **decision log**: every check with risk, decision, top reasons, raw answer, correct label and time, downloadable as CSV.
 
+**Behind the scenes** (collapsible, under each model's verdict, live and recorded): the request as sent, the exact text CLM reads (the state turned into `key: value` prose, the same function as CLM's own code), the 10 questions with every candidate answer text and the probability CLM gave it, and the raw response with timing.
+
 ## What happens under the hood
 
 > The full explanation with diagrams, theory and real measurements is in [docs/README.md](../docs/README.md).

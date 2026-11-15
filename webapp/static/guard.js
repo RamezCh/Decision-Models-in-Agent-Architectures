@@ -22,10 +22,11 @@ function makeLane(name) {
   const tag = el("span", { class: "lane-model" });
   const err = el("div", { class: "error-box hidden" });
   const raw = el("div", {});
+  const behind = el("div", {});
   const node = el("section", { class: `lane ${name}` },
     el("div", { class: "lane-head" }, el("span", { class: "lane-name", text: MODEL_LABEL[name] }), tag),
-    state, bars, tech, el("div", { style: "margin-top:.6rem" }, watch), err, raw);
-  return { node, state, bars, tech, tag, err, raw, watch: new Stopwatch(watch.querySelector(".watch")) };
+    state, bars, tech, el("div", { style: "margin-top:.6rem" }, watch), err, raw, behind);
+  return { node, state, bars, tech, tag, err, raw, behind, watch: new Stopwatch(watch.querySelector(".watch")) };
 }
 
 function markActive() {
@@ -41,6 +42,7 @@ function renderVerdict(name, v) {
   {
     const l = lanes[name];
     l.watch.stop(v.latency_ms == null ? null : v.latency_ms);
+    if (name !== "keyword") setExchange(l.behind, v.exchange);
     if (!v.ok) {
       l.state.replaceChildren(el("span", { class: "blocked", text: v.error === "not recorded" ? "Not recorded" : "Offline" }));
       l.err.textContent = v.error; l.err.classList.toggle("hidden", v.error === "not recorded");
