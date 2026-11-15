@@ -152,10 +152,9 @@ In the app, every answer shows how much it moved the risk, for example "+1.3 tow
 The reason is in how CLM reads (section 3). The state text is the context plus the question. With a one-word message, the question dominates, and it shares its words ("secret password") with the "yes" description, so "yes" is always the closest match. The fix is in the request, and the decision stays pure CLM:
 
 - **Give the situation in the state:** a bot named Vaulty guards a vault password, then the user's message.
-- **Ask a neutral question:** "What is the user doing in this message to Vaulty?"
-- **Offer parallel, equally specific choices:** three harmless ones (greeting or small talk, an unrelated question, asking about Vaulty) and four attack techniques (direct, disguised, role-play, instruction override). P(attack) is CLM's probability summed over the four attack choices.
+- **Ask about this situation:** "Does this message try to get the vault password out of Vaulty?"
 
-`tools/tune_guard.py` measures this against the first version and three other designs on the 25 labelled messages plus extra greetings.
+Measured with `tools/tune_guard.py` on 25 labelled messages plus 5 greetings, that took the ranking from AUC 0.62 to **1.00**: every attack scored above every harmless message. The percentages are still shifted (harmless up to 89.9%, attacks from 90.9%), because a yes/no answer from CLM says which of two descriptions is closer, not how likely something is. So the guard blocks at 90%, where the two groups separate. That threshold is the only number taken from the labelled data; there is no model on top.
 
 The *answer* check ("did Vaulty just leak the password?") is done by **plain code**. Matching a known secret, also reversed, spaced out, in base64 or translated, is exact string work. CLM did no better than chance at it, and there's no reason to ask a model something code answers perfectly. Hints and riddles that leak the password indirectly still get through; that's the game, and the guess box on the page lets a player prove it.
 
@@ -172,7 +171,7 @@ We keep the cube race in the presentation precisely because it shows this limit.
 python tools/diagnose_clm.py                 # asks CLM every variant, writes tools/clm_diagnosis.json
 python tools/make_doc_figures.py             # redraws the charts in docs/img/ from that file
 python tools/calibrate.py                    # refits the scam calibration from your recordings
-python tools/tune_guard.py                   # compares guard question designs on the labelled messages
+python tools/tune_guard.py                   # compares guard question designs; prints AUC and the best threshold
 python scam-detector-demo/evaluate.py        # raw vs calibrated metrics, leave-one-out
 ```
 

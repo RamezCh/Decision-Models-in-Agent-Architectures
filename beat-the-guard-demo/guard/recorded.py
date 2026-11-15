@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from system_one.recordings import load_sessions, session_meta
 
-from .game import DEFAULT_DEFENDER, DEFENDERS, MODELS, QUESTIONS_VERSION, build_verdicts, intent_view, outcome_for
+from .game import DEFAULT_DEFENDER, DEFENDERS, MODELS, QUESTIONS_VERSION, answers_view, build_verdicts, outcome_for
 
 
 def latest() -> dict[str, dict[str, dict]]:
@@ -36,8 +36,7 @@ def _view(call: dict) -> dict:
     if not call.get("ok"):
         return {"ok": False, "error": call.get("error"), "model": call.get("model"),
                 "input_ms": call.get("latency_ms"), "server_ms": call.get("server_ms")}
-    return intent_view(call["answers"]["intent"]["probabilities"], call.get("model"),
-                       call["latency_ms"], call.get("server_ms"))
+    return answers_view(call["answers"], call.get("model"), call["latency_ms"], call.get("server_ms"))
 
 
 def catalog() -> dict:

@@ -2,10 +2,6 @@
 // Live (default): the audience plays. Recorded: a fixed set of attacks recorded earlier
 // (beat-the-guard-demo/record.py), replayed with their real verdicts and timings.
 
-const TECHNIQUE = { greeting: "greeting / small talk", unrelated: "unrelated question", about_vaulty: "asks about Vaulty",
-                    direct: "asks directly", disguise: "disguised answer", roleplay: "role-play / story",
-                    override: "instruction override" };
-const ATTACK_CHOICES = ["direct", "disguise", "roleplay", "override"];
 // The guards come from the server (GUARD_MODELS in .env): keyword filter + CLM by default.
 let log = null;     // DecisionLog: one row per guard per message
 let speed = null;   // SpeedBoard: one sample per message (input check + output check)
@@ -61,13 +57,13 @@ function renderVerdict(name, v) {
       l.tech.textContent = "Word list + exact match. No AI.";
     } else {
       l.bars.replaceChildren(
-        bar("Message", v.input_p, "CLM's probability that the message is an attack: its four attack choices added up"),
+        bar("Message", v.input_p, "CLM's probability that the message is an attack, read straight from its answer"),
         bar("Answer", v.output_p, "Checked by code: does the answer contain the password plainly, spaced out, reversed, encoded or translated?"));
-      const top = Object.entries(v.technique_probs || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const parts = (v.parts || []).slice().sort((a, b) => b.p - a.p);
       l.tech.replaceChildren(
-        el("div", { text: "CLM's top choices: " + top.map(([k, p]) =>
-          `${TECHNIQUE[k] || k} ${pct(p)}${ATTACK_CHOICES.includes(k) ? " (attack)" : ""}`).join(" · ") }),
-        el("div", { class: "muted", text: "Pure CLM: one choice question, no extra model. The answer is checked by code." }));
+        el("div", { text: "CLM's answers: " + parts.map(x =>
+          `${x.label} ${pct(x.p)}${x.kind === "harmless" ? " (harmless)" : ""}`).join(" · ") }),
+        el("div", { class: "muted", text: `Pure CLM (${v.design}), no extra model. Blocks at the threshold. The answer is checked by code.` }));
     }
     if (l.raw) l.raw.replaceChildren();
   }
@@ -295,6 +291,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("composer").requestSubmit(); }
   });
   const thr = document.getElementById("threshold");
+  if (info && info.default_threshold) {   // each question design separates attacks at its own level
+    thr.value = info.default_threshold;
+    document.getElementById("thrVal").textContent = pct(info.default_threshold);
+  }
   thr.addEventListener("input", () => { document.getElementById("thrVal").textContent = pct(parseFloat(thr.value)); });
   thr.addEventListener("change", redecide);
   const reset = document.getElementById("reset");

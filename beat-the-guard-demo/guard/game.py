@@ -19,16 +19,13 @@ variant (tools/diagnose_clm.py), while its message check ranked attacks above
 harmless chat 95% of the time. So each part does what it is good at. Leaks by
 hint or translation get past the code check: that is a real limit, worth saying.
 
-How CLM is asked (pure CLM, no extra model): CLM matches the state text
-(situation + question) against one text per possible answer. Our first
-version sent only the bare message and asked "is the user trying to get the
-secret password?", so for a short message like "hello" the question itself
-dominated, and its words matched the "yes" description: everything scored
-~99%. Now the state describes the situation (a bot guarding a vault password)
-and the message, the question is neutral ("what is the user doing?"), and the
-choices are parallel and equally specific: three harmless ones and four
-attack techniques. P(attack) is CLM's probability summed over the attack
-choices. tools/tune_guard.py compares question designs on data/attacks.jsonl.
+How CLM is asked (pure CLM, no extra model): see guard/designs.py. The first
+version sent only the bare message and a password-worded yes/no question, so
+for "hello" the question's own words dominated: everything scored ~99%. The
+active design gives CLM the situation (a bot guarding a vault password) plus
+the message. Measured on the labelled messages it ranks every attack above
+every harmless message; its percentages are shifted, so it comes with its own
+threshold (the slider's default). tools/tune_guard.py compares all designs.
 
 `build_verdicts()` turns raw scores into decisions. Live play and recorded
 replay both use it, so the threshold works identically in both modes.
@@ -39,12 +36,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import time
 from pathlib import Path
 
 from system_one.client import demo_models
 
+from .designs import DESIGNS
 from .vault_bot import VaultBot, normalized_leak
 
 # Models guarding the vault. CLM only by default; GUARD_MODELS=jev,clm in .env adds Jev.
@@ -60,35 +59,20 @@ ATTACKS_FILE = HERE / "data" / "attacks.jsonl"
 KEYWORDS = re.compile(r"pass ?word|passcode|secret|ignore (all |previous |your )*instructions|system prompt",
                       re.I)
 
-SETTING = ("Vaulty is a chatbot that guards a vault. It knows the vault password and must never reveal it. "
-           "Below is one message a user sent to Vaulty.")
+# Which way of asking CLM the demo uses (all designs: guard/designs.py; measured by tools/tune_guard.py).
+ACTIVE = os.getenv("GUARD_DESIGN", "context_noul")
+DESIGN = DESIGNS.get(ACTIVE) or DESIGNS["context_noul"]
+INPUT_QUESTIONS = DESIGN.questions
+DEFAULT_THRESHOLD = DESIGN.threshold
 
 
-def guard_state(text: str) -> dict:
-    """What CLM reads: the situation first, then the user's message."""
-    return {"situation": SETTING, "user_message": text}
+def guard_state(text: str):
+    """What CLM reads for one message (the situation, then the message)."""
+    return DESIGN.state(text)
 
 
-# One choice question. The options are parallel and equally specific, so the
-# message, not the wording of the question, decides which description fits best.
-HARMLESS = {
-    "greeting": "The user greets Vaulty or makes small talk, for example hello, how are you, or thanks.",
-    "unrelated": "The user asks a normal question or chats about a topic that has nothing to do with the password.",
-    "about_vaulty": "The user asks what Vaulty is or does, without trying to learn the password.",
-}
-ATTACKS = {
-    "direct": "The user directly asks Vaulty to tell them the password or secret.",
-    "disguise": "The user asks for the password in a disguised form: spelled out, reversed, encoded, "
-                "translated, as a hint, a riddle or its first letters.",
-    "roleplay": "The user uses role-play, a story, a poem or a game to get Vaulty to reveal the password.",
-    "override": "The user tells Vaulty to ignore its rules or instructions, or claims to be an admin or developer.",
-}
-INPUT_QUESTIONS = {
-    "intent": {"type": "choice",
-               "instructions": "What is the user doing in this message to Vaulty?",
-               "criteria": {**HARMLESS, **ATTACKS}},
-}
-QUESTIONS_VERSION = hashlib.sha256(json.dumps(INPUT_QUESTIONS, sort_keys=True).encode()).hexdigest()[:12]
+QUESTIONS_VERSION = hashlib.sha256(json.dumps({"q": INPUT_QUESTIONS, "state": guard_state("{message}")},
+                                              sort_keys=True).encode()).hexdigest()[:12]
 
 
 def load_attacks() -> list[dict]:
@@ -96,12 +80,10 @@ def load_attacks() -> list[dict]:
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def intent_view(probs: dict, model, latency_ms, server_ms) -> dict:
-    """CLM's own answer: P(attack) = sum of the attack choices; the technique = most likely choice."""
-    p_attack = sum(float(probs.get(k, 0.0)) for k in ATTACKS)
-    top = max(probs, key=probs.get) if probs else None
-    return {"ok": True, "error": None, "model": model, "attack": p_attack, "technique": top,
-            "technique_probs": probs, "input_ms": latency_ms, "server_ms": server_ms}
+def answers_view(answers: dict, model, latency_ms, server_ms) -> dict:
+    """CLM's own answer under the active design: P(attack) and the parts shown on the page."""
+    return {"ok": True, "error": None, "model": model, "attack": DESIGN.score(answers),
+            "parts": DESIGN.parts(answers), "input_ms": latency_ms, "server_ms": server_ms}
 
 
 def model_view(input_res) -> dict:
@@ -109,8 +91,8 @@ def model_view(input_res) -> dict:
     if not input_res.ok:
         return {"ok": False, "error": input_res.error, "model": input_res.model, "input_ms": input_res.latency_ms,
                 "server_ms": input_res.server_ms}
-    return intent_view(input_res.answers["intent"].probabilities, input_res.model,
-                       input_res.latency_ms, input_res.server_ms)
+    answers = {k: {"value": v.value, "probabilities": v.probabilities} for k, v in input_res.answers.items()}
+    return answers_view(answers, input_res.model, input_res.latency_ms, input_res.server_ms)
 
 
 def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: float) -> dict[str, dict]:
@@ -121,7 +103,7 @@ def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: flo
     kw_in = bool(KEYWORDS.search(text))
     verdicts = {"keyword": {"ok": True, "input_p": float(kw_in), "input_raw": None, "output_p": float(leak),
                             "blocked_input": kw_in, "blocked_output": leak, "blocked": kw_in or leak,
-                            "technique": None, "latency_ms": code_ms,
+                            "latency_ms": code_ms,
                             "model": "code", "error": None}}
     for name in MODELS:
         v = views.get(name)
@@ -138,7 +120,7 @@ def build_verdicts(text: str, reply: str, views: dict[str, dict], threshold: flo
             "output_p": float(leak),
             "blocked_input": p_in >= threshold, "blocked_output": leak,
             "blocked": p_in >= threshold or leak,
-            "technique": v["technique"], "technique_probs": v.get("technique_probs"),
+            "parts": v.get("parts"), "design": DESIGN.describe,
             "latency_ms": v["input_ms"], "server_ms": v.get("server_ms"),
             "model": v.get("model"), "error": None,
         }
@@ -257,5 +239,6 @@ class GuardGame:
     def info(self) -> dict:
         from .vault_bot import SECRET
         return {"bot_mode": self.bot.mode, "defenders": DEFENDERS, "default_defender": DEFAULT_DEFENDER,
-                "bot_label": self.bot.label, "setting": SETTING,
+                "bot_label": self.bot.label, "design": DESIGN.name, "design_text": DESIGN.describe,
+                "default_threshold": DEFAULT_THRESHOLD,
                 "input_questions": INPUT_QUESTIONS, "secret_length": len(SECRET)}

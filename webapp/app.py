@@ -39,7 +39,7 @@ from cube.cube_state import ALL_MOVES, apply_move, is_solved, stickers_in_place 
 from cube.oracle import MAX_EXACT, distance, warm_up  # noqa: E402
 from cube.scrambler import scramble_exact  # noqa: E402
 from guard import recorded as guard_rec  # noqa: E402
-from guard.game import DEFAULT_DEFENDER, GuardGame  # noqa: E402
+from guard.game import DEFAULT_DEFENDER, DEFAULT_THRESHOLD, GuardGame  # noqa: E402
 from scam import recorded as scam_rec  # noqa: E402
 from scam.detector import MODELS as SCAM_MODELS, RED_FLAGS, analyze_listing, load_examples  # noqa: E402
 from system_one import SystemOneClient  # noqa: E402
@@ -178,7 +178,7 @@ class GuardIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     player: str = Field(default="anonymous", max_length=40)
     defender: str = DEFAULT_DEFENDER
-    threshold: float = Field(default=0.5, ge=0.05, le=0.95)
+    threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0.01, le=0.99)
 
 
 @app.post("/api/guard/message")
@@ -259,8 +259,8 @@ def replay_guard_catalog():
 
 
 @app.get("/api/replay/guard/attack")
-def replay_guard_attack(id: str, defender: str = DEFAULT_DEFENDER, threshold: float = 0.5):
-    return _found(guard_rec.replay_attack(id, defender, min(max(threshold, 0.05), 0.95)))
+def replay_guard_attack(id: str, defender: str = DEFAULT_DEFENDER, threshold: float = DEFAULT_THRESHOLD):
+    return _found(guard_rec.replay_attack(id, defender, min(max(threshold, 0.01), 0.99)))
 
 
 @app.get("/api/replay/guard/raw")
