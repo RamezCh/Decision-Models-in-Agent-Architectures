@@ -160,7 +160,7 @@ On a bigger, harder set (52 messages, many harmless ones about passwords in gene
 
 The *answer* check ("did Vaulty just leak the password?") is done by **plain code**. Matching a known secret, also reversed, spaced out, in base64 or translated, is exact string work. CLM did no better than chance at it, and there's no reason to ask a model something code answers perfectly. Hints and riddles that leak the password indirectly still get through; that's the game, and the guess box on the page lets a player prove it.
 
-**The cube.** Choosing the next Rubik's cube move is a genuine limit, not a wording problem. A good move needs planning several moves ahead, and a one-shot matcher has nothing to plan with:
+**The cube.** Choosing the next Rubik's cube move is a genuine limit, not a wording problem. We tried three ways of asking (`tools/tune_cube.py`), and on all of them CLM picked the same move, U2, for all 21 test cubes. Its answer doesn't depend on the cube at all. A good move needs working out what each turn does to the stickers and planning ahead; a one-step similarity match has nothing to do that with:
 
 ![Bar chart: CLM-8B's top move was optimal in 4.8% of 21 positions, a random legal move would be optimal 6.1% of the time. The median rank CLM gives the best move is 10 of 18.](img/cube_limits.png)
 
