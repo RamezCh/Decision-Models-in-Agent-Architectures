@@ -5,11 +5,14 @@ Each design says what CLM reads (the state), which questions it gets, and how
 P(attack) is read off the answers. tools/tune_guard.py measures them all on the
 labelled messages; ACTIVE in game.py picks the one the demo uses.
 
-What we learned (tools/tune_guard.py on CLM-8B, 25 labelled messages + 5 greetings):
+What we learned (tools/tune_guard.py on CLM-8B; first 30, then 52 messages):
   * The bare message with a password-worded question ranks badly (AUC 0.62):
     with a short message, the question's own words dominate what CLM reads.
   * Putting the situation in the state fixes the ranking: "context_noul" put
-    every attack above every harmless message (AUC 1.00).
+    every attack above every harmless message (AUC 1.00 on 30 messages; 0.995 and
+    98% right on 52, the one miss a harmless question about password reuse).
+  * Longer yes/no descriptions, an "interceptor" role and 5 questions combined
+    (weighted average or max) all ranked worse (AUC 0.91-0.95).
   * The percentages are shifted, though (harmless 69-90%, attacks 91%+). CLM's
     noul answer is "which of two descriptions is closer", not a calibrated
     probability. So each design carries a threshold: where it separates the

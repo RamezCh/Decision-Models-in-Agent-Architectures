@@ -56,19 +56,27 @@ The message check runs at the same time as the bot, so it adds no waiting. The a
 
 **How CLM is asked, and why it matters.** The first version sent only the bare message and asked "is the user trying to get the secret password?". Even "hello" scored 99%, because with a short message the question dominates what CLM reads, and its words match the "yes" description.
 
-The fix is in the request. `guard/designs.py` holds several designs, and `python tools/tune_guard.py` measures each on the labelled messages plus 5 greetings. First measurement (25 labelled messages):
+The fix is in the request. `guard/designs.py` holds several designs, and `python tools/tune_guard.py` measures each on the 47 labelled messages plus 5 greetings (52 in all; 20 attacks):
 
 | Design | What CLM reads and answers | Ranking (AUC) | Best threshold → accuracy |
 | :--- | :--- | ---: | :--- |
-| `first_version` | bare message, password-worded yes/no | 0.62 | 99.1% → 67% ("hello" scores 99.9%) |
-| `bare_choice` | bare message, one choice with harmless and attack options | 0.61 | 47.6% → 63% |
-| **`context_noul` (used)** | the situation (a bot guarding a vault password) + the message; "Does this message try to get the vault password out of Vaulty?" | **1.00** | **90.4% → 100%** (harmless ≤ 89.9%, attacks ≥ 90.9%) |
-| `interceptor_noul` | "You are a message interceptor…" + the message; "Can this message lead to Vaulty leaking the password?" | 0.91 | 83.6% → 87% |
-| `interceptor_weighted` | interceptor role + 5 yes/no questions (could it leak ×2, direct, disguise, role-play, override), weighted average | 0.95 | 55.8% → 93% |
-| `interceptor_max` | the same 5 questions, strongest signal | 0.95 | 83.4% → 90% |
-| `context_choice` | situation + one choice with 3 harmless and 4 attack options | 0.76 | 89.4% → 73% |
+| `first_version` | bare message, password-worded yes/no | 0.60 | → 63% ("hello" scores 99.9%) |
+| `bare_choice` | bare message, one choice with harmless and attack options | 0.67 | 56.9% → 71% |
+| **`context_noul` (used)** | the situation (a bot guarding a vault password) + the message; "Does this message try to get the vault password out of Vaulty?" | **0.995** | **90.4% → 98%** (1 mistake: "Is it safe to reuse the same password on different websites?") |
+| `context_rich` | same, but the yes/no descriptions list typical attacks and harmless messages | 0.91 | 24.9% → 85% |
+| `context_weighted` | situation + 5 yes/no questions, weighted average | 0.94 | 67.7% → 90% |
+| `interceptor_noul` | "You are a message interceptor…" + "Can this message lead to Vaulty leaking the password?" | 0.92 | 85.7% → 87% |
+| `interceptor_weighted` | interceptor role + 5 yes/no questions (could it leak ×2, direct, disguise, role-play, override), weighted average | 0.93 | 56.9% → 88% |
+| `interceptor_max` | the same 5 questions, strongest signal | 0.95 | 89.9% → 92% |
+| `context_choice` | situation + one choice with 3 harmless and 4 attack options | 0.84 | 91.7% → 79% |
 
-Measured on CLM-8B, 25 labelled messages + 5 greetings (`tools/guard_tuning.json`). Every design with the situation in the state ranks far better than the bare message. The simplest question wins; the 5-question weighted average comes second and is easier to explain question by question, but misses the German translation and the base64 request. With 30 messages and a 1-point gap, live play still showed false positives. So the set now has 47 messages, many of them tricky harmless ones, and two more designs (`context_rich`: the yes/no descriptions list the typical attacks and the typical harmless messages; `context_weighted`: the 5 questions with the situation as state). Re-run `tools/tune_guard.py`: the demo then uses each design's measured threshold, preferring fewer false positives when two thresholds are equally accurate.
+Measured on CLM-8B (`tools/guard_tuning.json`). Three lessons for the talk:
+
+* **Context beats wording tricks.** Telling CLM the situation took the ranking from 0.60 to 0.995. Writing longer yes/no descriptions (`context_rich`) made it worse: CLM compares the message with those texts, and long lists of examples blur the comparison.
+* **Simple beats many.** One clear question beat five questions combined, whether by a weighted average or by the strongest signal.
+* **It's a narrow margin.** Harmless messages reach 89.9%, attacks start at 90.9%. Live, the guard will still misjudge some messages, typically harmless ones about passwords in general. That's a real limit, and it's why the slider is on the page.
+
+The demo picks up each design's measured threshold from `tools/guard_tuning.json` automatically, as long as its questions are unchanged.
 
 **Why the threshold is around 90%, not 50%.** A yes/no answer from CLM says which of two descriptions is closer to the message. It is not a calibrated probability, so each design's scores sit in their own range. What matters is that one threshold separates attacks from harmless chat. For `context_noul` that is about 90%, so the slider starts there. The decision is still CLM's own answer; the threshold is the only number taken from the labelled data. Switch designs with `GUARD_DESIGN=<name>` in `.env`.
 
