@@ -3,6 +3,7 @@
 // (beat-the-guard-demo/record.py), replayed with their real verdicts and timings.
 
 // The guards come from the server (GUARD_MODELS in .env): keyword filter + CLM by default.
+let vaultLevel = null;   // Vaulty's difficulty (LLM mode only)
 let log = null;     // DecisionLog: one row per guard per message
 let speed = null;   // SpeedBoard: one sample per message (input check + output check)
 let defender = "clm", lanes = {}, mode = "live", catalog = null, lastReplay = null, replaying = false;
@@ -200,7 +201,7 @@ async function send(ev) {
   try {
     const res = await api("/api/guard/message", {
       text, defender, player: document.getElementById("player").value.trim() || "anonymous",
-      threshold: parseFloat(document.getElementById("threshold").value),
+      threshold: parseFloat(document.getElementById("threshold").value), level: vaultLevel,
     });
     renderVerdicts(res);
     logMessage(text, res);
@@ -294,6 +295,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (info && info.default_threshold) {   // each question design separates attacks at its own level
     thr.value = info.default_threshold;
     document.getElementById("thrVal").textContent = pct(info.default_threshold);
+    document.getElementById("thrSource").textContent =
+      `Starts at ${pct(info.default_threshold)}, where CLM's answers (design: ${info.design_text}) separate attacks from harmless chat. ` +
+      (info.threshold_source.startsWith("measured") ? `Threshold ${info.threshold_source}.` : "");
   }
   thr.addEventListener("input", () => { document.getElementById("thrVal").textContent = pct(parseFloat(thr.value)); });
   thr.addEventListener("change", redecide);
@@ -302,10 +306,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (reset.dataset.armed) { await api("/api/guard/reset", {}); delete reset.dataset.armed; reset.textContent = "Reset"; loadBoard(); }
     else { reset.dataset.armed = "1"; reset.textContent = "Click again to reset"; setTimeout(() => { delete reset.dataset.armed; reset.textContent = "Reset"; }, 3000); }
   });
+  if (info && info.bot_mode === "llm" && info.levels) {
+    vaultLevel = info.default_level;
+    const seg = document.getElementById("level");
+    const mark = () => seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === vaultLevel)));
+    for (const [k, label] of Object.entries(info.levels))
+      seg.append(el("button", { type: "button", "data-l": k, title: label, text: label.split(":")[0],
+        onclick: () => { vaultLevel = k; mark(); } }));
+    mark();
+    document.getElementById("levelField").hidden = false;
+  }
   if (info) {
     document.getElementById("vault").textContent = "●".repeat(info.secret_length);
     document.getElementById("botMode").textContent = info.bot_mode === "llm"
-      ? `Vaulty is a real language model (${info.bot_label.replace(/^LLM \(|\)$/g, "")} on BHT's LUMIS) with a “never reveal the password” instruction. It leaks by hint too; use the guess box to prove it.`
+      ? `Vaulty is a real language model (${info.bot_label.replace(/^LLM \(|\)$/g, "")} on BHT's LUMIS). Its instructions depend on the level above: Easy is naive, Hard never reveals the password. If it only hints, prove you got it with the guess box.`
       : "Vaulty is a scripted, deliberately gullible bot: it refuses plain requests but falls for tricks. The guards are what's being tested.";
   }
   loadBoard();

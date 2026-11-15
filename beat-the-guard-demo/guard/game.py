@@ -44,7 +44,7 @@ from pathlib import Path
 from system_one.client import demo_models
 
 from .designs import DESIGNS
-from .vault_bot import VaultBot, normalized_leak
+from .vault_bot import DEFAULT_LEVEL, LEVELS, VaultBot, normalized_leak
 
 # Models guarding the vault. CLM only by default; GUARD_MODELS=jev,clm in .env adds Jev.
 MODELS = demo_models("guard")
@@ -175,19 +175,19 @@ class GuardGame:
         self._save()
 
     # ── one live round ───────────────────────────────────────────────────
-    async def _reply(self, text: str):
+    async def _reply(self, text: str, level: str | None = None):
         t0 = time.perf_counter()
-        bot = await self.bot.reply(text)
+        bot = await self.bot.reply(text, level)
         return bot, (time.perf_counter() - t0) * 1000
 
-    async def play(self, text: str, player: str, defender: str, threshold: float) -> dict:
+    async def play(self, text: str, player: str, defender: str, threshold: float, level: str | None = None) -> dict:
         if defender not in DEFENDERS:
             defender = DEFAULT_DEFENDER
         player = (player or "anonymous").strip()[:40] or "anonymous"
 
         # the message check runs at the same time as the bot answers
         in_res, (bot, bot_ms) = await asyncio.gather(
-            self.client.compare(guard_state(text), INPUT_QUESTIONS, MODELS), self._reply(text))
+            self.client.compare(guard_state(text), INPUT_QUESTIONS, MODELS), self._reply(text, level))
         views = {n: model_view(in_res[n]) for n in MODELS}
         verdicts = build_verdicts(text, bot["reply"], views, threshold)
         leaked = bool(bot["leaked"])
@@ -240,5 +240,5 @@ class GuardGame:
         from .vault_bot import SECRET
         return {"bot_mode": self.bot.mode, "defenders": DEFENDERS, "default_defender": DEFAULT_DEFENDER,
                 "bot_label": self.bot.label, "design": DESIGN.name, "design_text": DESIGN.describe,
-                "default_threshold": DEFAULT_THRESHOLD,
+                "default_threshold": DEFAULT_THRESHOLD, "threshold_source": DESIGN.threshold_source, "levels": LEVELS, "default_level": DEFAULT_LEVEL,
                 "input_questions": INPUT_QUESTIONS, "secret_length": len(SECRET)}

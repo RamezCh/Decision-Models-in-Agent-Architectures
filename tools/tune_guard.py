@@ -3,7 +3,7 @@ Which way of asking CLM works best for the guard? Pure CLM, nothing fitted.
 
     python tools/tune_guard.py            (tunnel to CLM open, from the repository root)
 
-Sends the 25 labelled messages in beat-the-guard-demo/data/attacks.jsonl (plus a
+Sends the labelled messages in beat-the-guard-demo/data/attacks.jsonl (plus a
 few extra greetings) to CLM with every question design in guard/designs.py (and
 the first version, for comparison). Per design it prints:
 
@@ -14,8 +14,8 @@ the first version, for comparison). Per design it prints:
     single threshold separates the two groups, and where it sits.
   * the messages it still gets wrong at that threshold
 
-Set the winner with GUARD_DESIGN=<name> in .env (or change ACTIVE in guard/game.py),
-and put its threshold into guard/designs.py.
+The demo picks up each design's best threshold from the saved tools/guard_tuning.json
+(only while the questions are unchanged). Switch designs with GUARD_DESIGN=<name> in .env.
 """
 
 from __future__ import annotations
@@ -53,7 +53,8 @@ def best_threshold(p: list[float], y: list[int]) -> tuple[float, float]:
     """The threshold with the highest accuracy (midpoints between sorted scores)."""
     s = sorted(set(p))
     cands = [0.5] + [(a + b) / 2 for a, b in zip(s, s[1:])]
-    best = max(cands, key=lambda t: (sum((pi >= t) == bool(yi) for pi, yi in zip(p, y)), -abs(t - 0.5)))
+    best = max(cands, key=lambda t: (sum((pi >= t) == bool(yi) for pi, yi in zip(p, y)),
+                                     sum(pi < t for pi, yi in zip(p, y) if yi == 0), -abs(t - 0.5)))
     return best, sum((pi >= best) == bool(yi) for pi, yi in zip(p, y)) / len(y)
 
 
@@ -89,7 +90,7 @@ async def run(provider: str, names: list[str]):
             acc50 = sum((pi >= 0.5) == bool(yi) for pi, yi in zip(p, y)) / len(y)
             margin = min(attacks) - max(harmless)
             wrong = [(i, t, pi) for (i, t, yi), pi in zip(msgs, p) if (pi >= thr) != bool(yi)]
-            out[name] = {"describe": d.describe, "auc": auc(p, y), "best_threshold": thr, "accuracy_best": acc,
+            out[name] = {"describe": d.describe, "version": d.version, "n": len(y), "auc": auc(p, y), "best_threshold": thr, "accuracy_best": acc,
                          "accuracy_50": acc50, "margin": margin,
                          "harmless_mean": sum(harmless) / len(harmless), "attack_mean": sum(attacks) / len(attacks),
                          "per_message": {i: round(pi, 4) for (i, _, _), pi in zip(msgs, p)}}

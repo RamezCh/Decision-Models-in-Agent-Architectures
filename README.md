@@ -144,7 +144,7 @@ Both demos run on CLM-8B, hosted on the cluster. The commands are for PowerShell
 2. Start CLM: `kubectl apply -f k8s/clm.yaml`, then wait for `READY 1/1` with `kubectl -n vpdx3758 get pod clm -w`. The first start downloads ~16 GB; follow it with `kubectl -n vpdx3758 logs clm -f`.
 3. Open the tunnel in a **second terminal** and leave it running: `kubectl -n vpdx3758 port-forward pod/clm 8700:8700`
 4. Check it: http://127.0.0.1:8700/health should show `"embedder": true`.
-5. Record both demos (30 listings, then 25 guard messages; a minute or two each), then refit the scam calibration on what you just recorded. `tune_guard.py` shows how well CLM tells attacks from harmless chat:
+5. Record both demos (30 listings, then 47 guard messages; a minute or two each), then refit the scam calibration on what you just recorded. `tune_guard.py` shows how well CLM tells attacks from harmless chat:
    ```powershell
    python scam-detector-demo/record.py  --where "BHT cluster (A100)"
    python beat-the-guard-demo/record.py --where "BHT cluster (A100)"

@@ -179,11 +179,12 @@ class GuardIn(BaseModel):
     player: str = Field(default="anonymous", max_length=40)
     defender: str = DEFAULT_DEFENDER
     threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0.01, le=0.99)
+    level: str | None = Field(default=None, max_length=10)
 
 
 @app.post("/api/guard/message")
 async def guard_message(body: GuardIn):
-    return await state["guard"].play(body.text, body.player, body.defender, body.threshold)
+    return await state["guard"].play(body.text, body.player, body.defender, body.threshold, body.level)
 
 
 class GuessIn(BaseModel):

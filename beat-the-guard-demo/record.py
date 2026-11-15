@@ -3,7 +3,7 @@ record.py: record CLM's message check on the labelled messages, for calibration 
 
 Two uses:
   * calibration: tools/calibrate.py fits CLM's raw "is this an attack?" scores to
-    the labels in data/attacks.jsonl (13 attacks, 12 harmless messages)
+    the labels in data/attacks.jsonl (20 attacks, 27 harmless messages)
   * backup: if the network fails during the live game, the page replays these
     messages with the real recorded verdicts and timings
 
