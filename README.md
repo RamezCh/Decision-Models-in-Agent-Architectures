@@ -144,14 +144,17 @@ Both demos run on CLM-8B, hosted on the cluster. The commands are for PowerShell
 2. Start CLM: `kubectl apply -f k8s/clm.yaml`, then wait for `READY 1/1` with `kubectl -n vpdx3758 get pod clm -w`. The first start downloads ~16 GB; follow it with `kubectl -n vpdx3758 logs clm -f`.
 3. Open the tunnel in a **second terminal** and leave it running: `kubectl -n vpdx3758 port-forward pod/clm 8700:8700`
 4. Check it: http://127.0.0.1:8700/health should show `"embedder": true`.
-5. Record both demos (30 listings, then 25 guard messages; a minute or two each), then fit the calibrations on what you just recorded:
+5. Record both demos (30 listings, then 25 guard messages; a minute or two each), then refit the scam calibration on what you just recorded. `tune_guard.py` shows how well CLM tells attacks from harmless chat:
    ```powershell
    python scam-detector-demo/record.py  --where "BHT cluster (A100)"
    python beat-the-guard-demo/record.py --where "BHT cluster (A100)"
    python tools/calibrate.py
+   python tools/tune_guard.py
    ```
 6. Optional, for your slides: `python scam-detector-demo/evaluate.py` writes `scam-detector-demo/results/report.md` (raw vs calibrated, leave-one-out). To refresh the charts in `docs/`, run `python tools/diagnose_clm.py` (tunnel open) and then `python tools/make_doc_figures.py`.
-7. Free the GPU: `kubectl -n vpdx3758 delete pod clm` (the model stays on the disk). Commit the new files in `recordings/` and the `data/calibration_clm.json` files so the replays and calibrations travel with the repo.
+7. Free the GPU: `kubectl -n vpdx3758 delete pod clm` (the model stays on the disk). Commit the new files in `recordings/` and `scam-detector-demo/data/calibration_clm.json` so the replays and the calibration travel with the repo.
+
+**BHT Medium (chat LLM).** Vaulty and the optional cube player use BHT's `bht/medium` on LUMIS. The app reads the key from your environment variable `BHT_LLM_INF_API_KEY` (don't put it in `.env`). Without it, Vaulty is the scripted bot.
 
 **Presenting**
 
@@ -168,7 +171,7 @@ Record each model separately. Each command writes `recordings/<demo>/<date>-<tim
 # CLM, with the cluster tunnel open (see k8s/README.md)
 python scam-detector-demo/record.py  --where "BHT cluster (A100)"
 python beat-the-guard-demo/record.py --where "BHT cluster (A100)"
-python tools/calibrate.py            # fit the scam and guard calibrations on these recordings
+python tools/calibrate.py            # fit the scam calibration on these recordings
 cd rubric-cube-demo
 python -m runner.record --players clm random oracle --levels 2 3 4 --cubes 10 --where "BHT cluster (A100)"
 
@@ -202,7 +205,8 @@ python tools/mock_system_one_server.py --port 8701 --name jev --latency-ms 120 &
 
 ```bash
 cd rubric-cube-demo && python -m runner.race --level 3        # live cube race in the terminal
-python tools/calibrate.py                                       # fit calibrations from the recordings (LOO metrics)
+python tools/calibrate.py                                       # fit the scam calibration from the recordings (LOO metrics)
+python tools/tune_guard.py                                      # compare guard question designs on CLM (needs the tunnel)
 python scam-detector-demo/evaluate.py                           # from the recordings: raw vs calibrated AUC and Brier
                                                                 # (leave-one-out), reliability tables, latency percentiles
 python tools/diagnose_clm.py                                    # CLM question-wording experiment (needs the tunnel)
@@ -217,11 +221,11 @@ system_one/            one client for both models (same wire format: POST /v1/sy
 recordings/            recorded calls, replayed by the web app (created by the record.py scripts)
 rubric-cube-demo/      README + screenshots; cube engine (moves derived from 3D geometry), exact solver, players, CLI race
 scam-detector-demo/    README + screenshots; red flags + combining logic, 30 labelled synthetic listings, evaluate.py
-beat-the-guard-demo/   README + screenshots; vault bot (scripted, or any OpenAI-compatible LLM), guards, leaderboard
+beat-the-guard-demo/   README + screenshots; vault bot (BHT bht/medium, or scripted), guards, leaderboard
 k8s/                   clm.yaml + README: CLM on one A100 in namespace vpdx3758, reachable only via port-forward
 webapp/                the web pages for all three demos: FastAPI app + static pages (no build step, no CDN: works offline in the lecture hall)
 docs/                  behind the scenes: how the models answer, wording, calibration, limits (diagrams + charts)
-tools/                 mock server, calibrate.py, diagnose_clm.py, make_doc_figures.py
+tools/                 mock server, calibrate.py, tune_guard.py, diagnose_clm.py, make_doc_figures.py
 ```
 
 ---

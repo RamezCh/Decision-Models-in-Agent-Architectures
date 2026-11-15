@@ -6,7 +6,8 @@ Calibrate CLM's raw scores on the labelled examples, from the recordings.
 
 Writes, per model:
   scam-detector-demo/data/calibration_<model>.json    combines the 10 answers into one calibrated risk
-  beat-the-guard-demo/data/calibration_<model>.json   maps the raw "is this an attack?" score to a probability
+
+(The guard is not calibrated: it uses CLM's own probability. See tools/tune_guard.py.)
 
 Why: CLM ranks well, but its raw percentages are shifted per question (e.g. "is it
 a scam?" averaged 96% on scams and 93% on legit listings). A small logistic
@@ -16,7 +17,7 @@ needs a new recording.
 
 Honesty check: the numbers it prints are LEAVE-ONE-OUT. Each example is scored by
 a calibration fitted without it, so they estimate how it does on new data. With
-30 listings and 25 messages, treat them as a classroom illustration.
+30 listings, treat them as a classroom illustration.
 """
 
 from __future__ import annotations
@@ -83,44 +84,13 @@ def calibrate_scam(source: str | None):
         print(f"    saved {calibration_path(prov).relative_to(ROOT)}")
 
 
-def calibrate_guard():
-    from guard.game import MODELS, QUESTIONS_VERSION, calibration_path, load_attacks
-    from guard.recorded import latest
-    labels = {a["id"]: int(a["attack"]) for a in load_attacks()}
-    rec = latest()
-    if not rec:
-        print("\nBeat the guard: no recordings with the current questions. Run: python beat-the-guard-demo/record.py")
-        return
-    print("\nBEAT THE GUARD (message check)")
-    for prov, by_id in rec.items():
-        if prov not in MODELS:
-            continue
-        ids = [i for i, h in by_id.items() if h["call"].get("ok") and i in labels]
-        raw = [by_id[i]["call"]["answers"]["attack"]["value"] for i in ids]
-        y = [labels[i] for i in ids]
-        if len(set(y)) < 2 or len(ids) < 8 or min(sum(y), len(y) - sum(y)) < 2:
-            print(f"  {prov}: only {len(ids)} usable messages, skipping")
-            continue
-        rows = [[p] for p in raw]
-        cal = fit_combined(rows, y, l2=0.1)
-        loo = loo_predict(rows, y, l2=0.1)
-        report(f"{prov}: {len(ids)} messages ({sum(y)} attacks)", raw, loo, y)
-        cal.update(questions_version=QUESTIONS_VERSION, n=len(ids), model=prov,
-                   fitted_on=", ".join(sorted({h["meta"]["file"] for h in by_id.values()})),
-                   created=time.strftime("%Y-%m-%d %H:%M"), loo_auc=auc(loo, y), loo_brier=brier(loo, y))
-        calibration_path(prov).write_text(json.dumps(cal, indent=2), encoding="utf-8")
-        print(f"    saved {calibration_path(prov).relative_to(ROOT)}")
-
-
 def main():
     ap = argparse.ArgumentParser(description="Calibrate CLM on the labelled examples")
     ap.add_argument("--scam-from", help="fit the scam check from a diagnose_clm.py result instead of recordings")
-    ap.add_argument("--only", choices=["scam", "guard"])
+    ap.add_argument("--only", choices=["scam"], help="kept for compatibility; only the scam check is calibrated")
     a = ap.parse_args()
     if a.only in (None, "scam"):
         calibrate_scam(a.scam_from)
-    if a.only in (None, "guard") and not a.scam_from:
-        calibrate_guard()
     print("\nRestart the web app (or just reload the page) to use the new calibration.")
 
 

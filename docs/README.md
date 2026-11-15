@@ -56,8 +56,8 @@ There are three question types:
 
 | Type | Asks | Returns | Used in |
 |---|---|---|---|
-| `noul` | Is this true? | one probability, 0–1 | scam red flags, guard "is this an attack?" |
-| `choice` | Which of these options? | a probability for every option | next cube move, guard "which technique?" |
+| `noul` | Is this true? | one probability, 0–1 | scam red flags |
+| `choice` | Which of these options? | a probability for every option | next cube move, guard "what is the user doing?" |
 | `score` | Where on this scale? | a probability per level + the expected level | – |
 
 Every question is answered **in parallel against the same state**. Adding a question barely changes the response time: in the app, ten questions take about as long as one.
@@ -115,10 +115,9 @@ The `clm-raw` bar in the wording chart is an ablation that skips the trained hea
 
 With good questions, CLM *ranks* listings well: scams get higher scores than legit ones (AUC 0.93). But the raw numbers are **shifted**. Legit listings also got 85–98% on "is this a scam?". A ranking is useful; a "96%" that is wrong half the time is not.
 
-**Calibration** fixes the scale with a small model fitted on labelled examples:
+**Calibration** fixes the scale with a weighted sum of CLM's answers. The weights are learned from the labelled examples instead of picked by hand: a logistic regression, which is a weighted average in log-odds, not a second AI model.
 
 - **Many answers, one risk (scam check):** a logistic regression on all ten answers, each turned into log-odds and standardised. `risk = σ(b + Σ wₖ·zₖ)`, fitted on the 30 labelled listings.
-- **One answer (guard):** Platt scaling, the same idea with a single input.
 
 ![Two dot plots of P(scam) per listing. Raw: scams and legit listings all sit between 85% and 98%, Brier 0.431. Calibrated (leave-one-out): legit listings mostly below 50%, scams mostly above 75%, Brier 0.070, AUC 0.97.](img/raw_vs_calibrated.png)
 
@@ -146,14 +145,19 @@ In the app, every answer shows how much it moved the risk, for example "+1.3 tow
 
 ## 8. Where it breaks: the guard and the cube
 
-**The guard.** "Is this message trying to get the password?" works as a ranking (AUC 0.95), but the raw scores all sit above 98.8%. Any fixed threshold either blocks everything or lets everything through:
+**The guard: a wording problem, not a model limit.** Our first version sent CLM only the bare message and asked "is the user trying to get the secret password?". Every message, even "Hi Vaulty", scored above 98.8%:
 
 ![Dot plot of raw CLM attack scores for 12 messages on an axis from 98.5% to 100%. The two harmless messages are at 98.8% and 99.1%, the attacks between 98.9% and 100%: correct order, but every message is above any useful threshold.](img/guard_raw_scores.png)
 
-Two changes followed:
+The reason is in how CLM reads (section 3). The state text is the context plus the question. With a one-word message, the question dominates, and it shares its words ("secret password") with the "yes" description, so "yes" is always the closest match. The fix is in the request, and the decision stays pure CLM:
 
-- The message check gets Platt-calibrated on 25 labelled messages (13 attacks, 12 harmless; see `beat-the-guard-demo/data/attacks.jsonl`).
-- The *answer* check ("did Vaulty just leak the password?") is now done by **plain code**. Matching a known secret, also reversed, spaced out or in base64, is exact string work. CLM did no better than chance at it, and there's no reason to ask a model something code answers perfectly. Hints and riddles that leak the password indirectly still get through; that's the game.
+- **Give the situation in the state:** a bot named Vaulty guards a vault password, then the user's message.
+- **Ask a neutral question:** "What is the user doing in this message to Vaulty?"
+- **Offer parallel, equally specific choices:** three harmless ones (greeting or small talk, an unrelated question, asking about Vaulty) and four attack techniques (direct, disguised, role-play, instruction override). P(attack) is CLM's probability summed over the four attack choices.
+
+`tools/tune_guard.py` measures this against the first version and three other designs on the 25 labelled messages plus extra greetings.
+
+The *answer* check ("did Vaulty just leak the password?") is done by **plain code**. Matching a known secret, also reversed, spaced out, in base64 or translated, is exact string work. CLM did no better than chance at it, and there's no reason to ask a model something code answers perfectly. Hints and riddles that leak the password indirectly still get through; that's the game, and the guess box on the page lets a player prove it.
 
 **The cube.** Choosing the next Rubik's cube move is a genuine limit, not a wording problem. A good move needs planning several moves ahead, and a one-shot matcher has nothing to plan with:
 
@@ -167,7 +171,8 @@ We keep the cube race in the presentation precisely because it shows this limit.
 # with the port-forward to CLM open (see the main README)
 python tools/diagnose_clm.py                 # asks CLM every variant, writes tools/clm_diagnosis.json
 python tools/make_doc_figures.py             # redraws the charts in docs/img/ from that file
-python tools/calibrate.py                    # refits the calibrations from your recordings
+python tools/calibrate.py                    # refits the scam calibration from your recordings
+python tools/tune_guard.py                   # compares guard question designs on the labelled messages
 python scam-detector-demo/evaluate.py        # raw vs calibrated metrics, leave-one-out
 ```
 

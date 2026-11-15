@@ -14,6 +14,7 @@
   --kw: #5f6878;
   --kw-soft: #e5e8ee;
   --rnd: #8a94a6;
+  --llm: #c2477a;
   --orc: #b8860b;
   --good: #19803a;
   --check: #a86400;
@@ -98,6 +99,7 @@ textarea { resize: vertical; min-height: 9rem; line-height: 1.45; }
 .lane { background: var(--surface); border: 1px solid var(--line); border-top: 6px solid var(--lane, var(--ink)); border-radius: var(--radius); padding: .9rem 1rem 1rem; }
 .lane.jev { --lane: var(--jev); --lane-soft: var(--jev-soft); }
 .lane.clm { --lane: var(--clm); --lane-soft: var(--clm-soft); }
+.lane.llm { --lane: var(--llm); --lane-soft: #f8e6ee; }
 .lane.random { --lane: var(--rnd); --lane-soft: var(--kw-soft); }
 .lane.oracle { --lane: var(--orc); --lane-soft: #f6ecd2; }
 .lane.keyword { --lane: var(--kw); --lane-soft: var(--kw-soft); }

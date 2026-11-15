@@ -18,6 +18,7 @@ and the recorder, so every mode judges moves exactly the same way.
 from __future__ import annotations
 
 import random
+import re
 import time
 from dataclasses import asdict
 from typing import Any, Callable
@@ -25,10 +26,12 @@ from typing import Any, Callable
 from cube.cube_state import (ALL_MOVES, COLOR_NAMES, FACE_NAMES, FACES, apply_move, is_solved,
                              stickers_in_place)
 from cube.oracle import evaluate_moves
+from system_one.llm import ChatLLM
 
 PLAYERS = {
     "jev": "Jev (TypeSafe)",
     "clm": "CLM-8B",
+    "llm": "BHT Medium (LLM)",
     "random": "Random mover",
     "oracle": "Perfect solver",
 }
@@ -107,6 +110,9 @@ async def decide(player: str, state: list, last_move: str | None, client=None,
                 "probabilities": {m: (1 / len(best) if m in best else 0.0) for m in moves},
                 "confidence": 1.0, "latency_ms": (time.perf_counter() - t0) * 1000}
 
+    if player == "llm":
+        return await _llm_decide(state, last_move, moves)
+
     if player not in ("jev", "clm"):
         raise ValueError(f"unknown player {player!r}")
 
@@ -125,6 +131,42 @@ async def decide(player: str, state: list, last_move: str | None, client=None,
         "request": request,
         "answers": {k: asdict(v) for k, v in res.answers.items()},
     }
+
+
+_LLM: ChatLLM | None = None
+_MOVE_RX = re.compile(r"(?<![A-Za-z])([UDFBLR])(2|'|’)?(?![A-Za-z0-9])")
+
+
+def llm_prompt(state: list, last_move: str | None, moves: list[str]) -> list[dict]:
+    return [
+        {"role": "system", "content": "You are solving a Rubik's cube one move at a time. "
+                                      "Reply with exactly one move code from the allowed list and nothing else."},
+        {"role": "user", "content": state_text(state, last_move) + "\n\nAllowed moves:\n"
+         + "\n".join(move_description(m, state) for m in moves)
+         + "\n\nWhich single move brings the cube closest to solved? Answer with the move code only, e.g. R'"},
+    ]
+
+
+def parse_move(text: str, moves: list[str]) -> str | None:
+    """The first allowed move code in the reply (an LLM writes text, so we have to parse it)."""
+    for m in _MOVE_RX.finditer(text or ""):
+        move = m.group(1) + (m.group(2) or "").replace("’", "'")
+        if move in moves:
+            return move
+    return None
+
+
+async def _llm_decide(state: list, last_move: str | None, moves: list[str]) -> dict[str, Any]:
+    """A chat LLM as a cube player (System 2): it writes text; we parse a move out of it."""
+    global _LLM
+    _LLM = _LLM or ChatLLM()
+    messages = llm_prompt(state, last_move, moves)
+    res = await _LLM.chat(messages, max_tokens=1024, temperature=0.2)
+    move = parse_move(res.text, moves) if res.ok else None
+    error = res.error if not res.ok else (None if move else f"no allowed move in the reply: {res.text[:80]!r}")
+    return {"ok": move is not None, "move": move, "probabilities": {}, "confidence": None,
+            "latency_ms": res.latency_ms, "server_ms": None, "model": res.model, "error": error,
+            "request": {"messages": messages}, "answers": {"text": res.text}}
 
 
 def judge(state: list, move: str, last_move: str | None, constrain: bool = True,

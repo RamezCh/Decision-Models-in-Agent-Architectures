@@ -11,7 +11,7 @@ Jev and CLM play the same scrambled Rubik's cube, one move at a time. A perfect 
 
 ## What the audience sees
 
-* **One lane per player**, always in the same colour: Jev indigo, CLM teal, random grey, perfect solver gold.
+* **One lane per player**, always in the same colour: Jev indigo, CLM teal, BHT Medium (optional chat LLM) pink, random grey, perfect solver gold.
 * **The unfolded cube** after every move, with the face that was just turned outlined.
 * **A stopwatch** counting while the model "thinks", then freezing on the measured time.
 * **Every move graded** by the referee: <code>optimal</code> (one step closer, the best possible), <code>neutral</code> (no progress), <code>worse</code> (further away).
@@ -106,7 +106,7 @@ python -m pytest tests            # engine, solver and scrambler tests
 | `cube/cube_state.py` | Sticker layout, the 18 moves (derived from 3D geometry), helpers |
 | `cube/oracle.py` | Exact "moves left to solve" referee (up to 7 moves) |
 | `cube/scrambler.py` | Seeded scrambles; `scramble_exact()` gives a cube exactly N moves from solved |
-| `agents/players.py` | The four players, the shared request, the `play()` game loop and the `judge()` referee call |
+| `agents/players.py` | The players (Jev, CLM, BHT Medium, random, perfect solver), the shared request, the `play()` game loop and the `judge()` referee call |
 | `agents/recorded.py` | Loads recordings for replay and builds the summary |
 | `runner/record.py` | Records games, one player at a time |
 | `runner/race.py` | Live race in the terminal |
@@ -118,4 +118,5 @@ The web page itself is in `../webapp/static/cube.html` and `cube.js`.
 
 * **Speed adds up.** A model that needs 400 ms per move needs 4 s for 10 moves. This is why System One latency matters for agents that take many steps.
 * **The honest limit.** Solving a cube means planning several moves ahead; a one-shot decision model only sees the next move. Expect Jev and CLM to be much closer to the random mover than to the perfect solver. That's the System 1 vs System 2 point of the talk: use the fast model for the decision at hand, and planning or search (or a System 2 model) for the long game.
+* **System 1 vs System 2, live.** Tick *BHT Medium (LLM)* to add a chat model (`bht/medium` on BHT's LUMIS; needs `BHT_LLM_INF_API_KEY` in your environment). It gets the same cube description and move list, writes its answer as text, and the app parses a move out of it. Compare seconds per move and the optimal-move rate: writing more is not the same as planning ahead. It also gives no probabilities, only text. Record it like the others: `python -m runner.record --players llm --levels 2 3 4 --cubes 10`.
 * **What to compare.** The optimal-move rate against the random mover's shows whether a model has *any* sense of the cube. Usually only one or two of the 15–18 moves are optimal, so random play scores about 7%. Time per move shows the cost.

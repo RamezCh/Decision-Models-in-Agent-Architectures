@@ -4,7 +4,7 @@
 
 const FACE_POS = { 0: [3, 0], 1: [6, 3], 2: [3, 3], 3: [3, 6], 4: [0, 3], 5: [9, 3] }; // U R F D L B -> [col,row]
 const FACE_OF_MOVE = { U: 0, R: 1, F: 2, D: 3, L: 4, B: 5 };
-const LANE_COLOR = { jev: "var(--jev)", clm: "var(--clm)", random: "var(--rnd)", oracle: "var(--orc)" };
+const LANE_COLOR = { jev: "var(--jev)", clm: "var(--clm)", llm: "var(--llm)", random: "var(--rnd)", oracle: "var(--orc)" };
 // pause after each move so an audience can follow (the "Pause after each move" setting)
 const pauseMs = () => parseInt(document.getElementById("pace").value, 10);
 let log = null;
@@ -37,7 +37,7 @@ function makeLane(player) {
   const banner = el("div", { class: "solved-banner hidden", text: "Solved" });
   const model = el("span", { class: "lane-model" });
   const rec = cube.recorded ? cube.recorded.players[player] : null;
-  const raw = rec && (player === "jev" || player === "clm")
+  const raw = rec && ["jev", "clm", "llm"].includes(player)
     ? rawLogLink(`/api/replay/cube/raw?level=${cube.level}&seed=${cube.seed}&player=${player}`) : null;
   const node = el("section", { class: `lane ${player}` },
     el("div", { class: "lane-head" }, el("span", { class: "lane-name", text: MODEL_LABEL[player] }), model),
@@ -108,7 +108,7 @@ async function loadRecordedCube(seed) {
   }
   setInfo(`Recorded cube ${seed}: scramble ${cube.scramble.join(" ")} (${level} perfect move${level > 1 ? "s" : ""} solve it)`);
   const metas = {};
-  for (const [p, r] of Object.entries(game.players)) if (p === "jev" || p === "clm") metas[p] = r.recorded;
+  for (const [p, r] of Object.entries(game.players)) if (["jev", "clm", "llm"].includes(p)) metas[p] = r.recorded;
   showRecordingNote("recNote", metas, "The lanes start together here, but each model's moves come from its own separate recording.");
   buildLanes();
 }
@@ -166,7 +166,8 @@ async function playLane(lane, maxSteps) {
     log.add({ cube: cubeLabel(), who: whoNode(lane.player), step: lane.steps, move: el("strong", { text: res.move }),
               p: pChosen == null ? "–" : pct(pChosen),
               opts: res.probabilities && Object.keys(res.probabilities).length ? topOptions(res.probabilities, res.move)
-                    : lane.player === "oracle" ? "looks up the best move" : lane.player === "random" ? "uniform random" : "–",
+                    : lane.player === "oracle" ? "looks up the best move" : lane.player === "random" ? "uniform random"
+                    : lane.player === "llm" ? "writes text, no probabilities" : "–",
               verdict: tag(res.verdict, res.verdict), left: res.distance_after == null ? "7+" : res.distance_after,
               ms: fmtMs(res.latency_ms) });
     if (res.solved) { lane.solved = true; lane.banner.textContent = `Solved in ${lane.steps} moves`; lane.banner.classList.remove("hidden"); }
@@ -177,6 +178,11 @@ async function playLane(lane, maxSteps) {
 }
 
 function showBars(lane, probs, chosen) {
+  if (lane.player === "llm") {   // a chat LLM writes text: there is no probability per move
+    lane.bars.replaceChildren(el("div", { class: "small muted", text: chosen
+      ? `Wrote “${chosen}”. A chat model gives text, not a probability for each move.` : "" }));
+    return;
+  }
   const top = Object.entries(probs || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
   lane.bars.replaceChildren(...top.map(([m, p]) =>
     el("div", { class: "bar" }, el("span", { text: m + (m === chosen ? "  (chosen)" : "") }),
@@ -239,7 +245,7 @@ function renderSummary() {
   const lv = catalog && catalog.levels[level];
   if (mode !== "recorded" || !lv) { panel.classList.add("hidden"); return; }
   document.getElementById("recSummaryTitle").textContent = `All ${lv.seeds.length} recorded cubes at difficulty ${level}`;
-  const order = ["jev", "clm", "random", "oracle"].filter(p => lv.summary[p]);
+  const order = ["jev", "clm", "llm", "random", "oracle"].filter(p => lv.summary[p]);
   document.getElementById("recSummary").replaceChildren(
     el("tr", {}, ...["Player", "Cubes", "Solved", "Optimal moves", "Median time per move", "Stopped on error"].map(t => el("th", { text: t }))),
     ...order.map(p => {

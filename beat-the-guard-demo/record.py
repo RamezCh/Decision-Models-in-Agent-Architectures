@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from guard.game import INPUT_QUESTIONS, MODELS, QUESTIONS_VERSION, load_attacks  # noqa: E402
+from guard.game import INPUT_QUESTIONS, MODELS, QUESTIONS_VERSION, guard_state, load_attacks  # noqa: E402
 from guard.vault_bot import VaultBot  # noqa: E402
 from system_one import SystemOneClient  # noqa: E402
 from system_one.recordings import Recorder  # noqa: E402
@@ -45,8 +45,9 @@ async def record(provider: str, args, client: SystemOneClient, bot: VaultBot):
     print(f"{p.label} -> {rec.path}\n  network ping (no model work): {ping.get('median_ms')} ms")
     for a in attacks:
         reply = await bot.reply(a["text"])
-        res = await client.ask(provider, a["text"], INPUT_QUESTIONS)
-        rec.call({"state": a["text"], "questions": INPUT_QUESTIONS}, res,
+        state = guard_state(a["text"])
+        res = await client.ask(provider, state, INPUT_QUESTIONS)
+        rec.call({"state": state, "questions": INPUT_QUESTIONS}, res,
                  {"attack_id": a["id"], "text": a["text"], "is_attack": a["attack"], "bot_reply": reply["reply"],
                   "leaked": reply["leaked"], "how": reply["how"], "bot_mode": bot.mode,
                   "questions_version": QUESTIONS_VERSION})
