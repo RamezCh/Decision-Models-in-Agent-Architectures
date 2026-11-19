@@ -298,7 +298,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("guessForm").addEventListener("submit", guessPassword);
   const lp = logPanel("decisionLog", "Decision log",
     "Every message, newest first, for every guard: CLM's probability that the message is an attack, whether code found the password in Vaulty's answer, what the guard did, and whether that was right. The guard you play against is highlighted.");
-  document.getElementById("speedBoard").closest("section").after(lp.section);
+  addTab("details", "Decision log", lp.section, { first: true });
   log = new DecisionLog(lp.box, [
     { key: "msg", label: "Message", cls: "msgcol" }, { key: "who", label: "Guard" }, { key: "pmsg", label: "P(attack)", cls: "num" },
     { key: "leak", label: "Password in answer (code)" }, { key: "decision", label: "Guard did" },

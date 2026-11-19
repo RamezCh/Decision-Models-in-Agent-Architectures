@@ -98,7 +98,13 @@ def guard_page():
 
 @app.get("/api/health")
 async def health():
-    return await state["client"].health()
+    out = await state["client"].health()
+    from system_one.llm import ChatLLM          # the chat LLM (System 2) used by Vaulty, the reviewer and the cube
+    llm = ChatLLM()
+    out["llm"] = {"label": llm.model, "configured": llm.configured, "where": "BHT LUMIS",
+                  "base_url": llm.base_url, "model": llm.model, "reachable": None}
+    await llm.aclose()
+    return out
 
 
 # ── Rubik's Cube race ─────────────────────────────────────────────────────────

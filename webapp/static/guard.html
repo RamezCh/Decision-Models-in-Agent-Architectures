@@ -10,7 +10,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <a class="brand" href="/">Decision <span class="c">models</span></a>
   <nav class="nav" aria-label="Demos">
     <a href="/">Overview</a>
     <a href="/cube">Cube race</a>
@@ -37,7 +37,21 @@
   </div>
   <div class="recnote hidden" id="recNote"></div>
 
-  <div class="two">
+  <section class="panel controls guard-controls">
+    <div class="field">Who guards the vault?
+      <div class="seg" id="defender" role="group" aria-label="Active guard"></div>
+    </div>
+    <div class="field" id="levelField" hidden>How hard is Vaulty to fool?
+      <div class="seg" id="level" role="group" aria-label="Vaulty's difficulty"></div>
+    </div>
+    <label class="field thr-field"><span>Block when the guard is at least <strong id="thrVal">90%</strong> sure it's an attack or a leak</span>
+      <input type="range" id="threshold" min="0.01" max="0.99" step="0.001" value="0.9">
+    </label>
+    <label class="field">Your name <input type="text" id="player" maxlength="40" placeholder="anonymous"></label>
+    <p class="small muted full-row" id="thrSource"></p>
+  </section>
+
+  <div class="two guard-main">
     <section class="panel">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap">
         <h2 style="margin:0">Chat with Vaulty</h2>
@@ -52,7 +66,7 @@
         <button class="btn" id="send" type="submit">Send</button>
       </form>
       <form class="guess" id="guessForm">
-        <label for="guess" class="small">Think Vaulty gave it away (maybe as a hint or in another language)? Guess the password:</label>
+        <label for="guess" class="small">Think Vaulty gave it away, maybe as a hint or in another language? Guess the password:</label>
         <div class="guess-row">
           <input type="text" id="guess" maxlength="100" autocomplete="off" placeholder="your guess">
           <button class="btn ghost" type="submit">Open the vault</button>
@@ -65,48 +79,37 @@
           Replays don't count for the leaderboard.</p>
         <div class="attack-list" id="attackList"></div>
       </div>
-      <div class="form-grid" style="margin-top:.8rem">
-        <label class="field">Your name (for the leaderboard) <input type="text" id="player" maxlength="40" placeholder="anonymous"></label>
-        <div class="field full">Who guards the vault?
-          <div class="seg" id="defender" role="group" aria-label="Active guard">
-          </div>
-        </div>
-        <div class="field full" id="levelField" hidden>How hard is Vaulty to fool?
-          <div class="seg" id="level" role="group" aria-label="Vaulty's difficulty"></div>
-        </div>
-        <label class="field full"><span>Block when the guard is at least <strong id="thrVal">90%</strong> sure it's an attack or a leak</span>
-          <input type="range" id="threshold" min="0.01" max="0.99" step="0.001" value="0.9">
-          <span class="small muted" id="thrSource"></span>
-        </label>
-      </div>
       <p class="small muted" id="botMode"></p>
     </section>
 
     <section>
       <div class="lanes three" id="verdicts"></div>
       <div class="truth hidden" id="truth"></div>
-      <section class="panel" style="margin-top:1rem">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
-          <h2>Speed</h2>
-          <button class="btn ghost small" type="button" id="speedClear">Clear</button>
-        </div>
-        <div id="speedBoard"></div>
-      </section>
-      <section class="panel" style="margin-top:1rem">
-        <h2>How the guards are doing</h2>
-        <table class="board" id="stats"></table>
-        <p class="small muted">A good guard catches every leak while blocking as little as possible when nothing leaked
-          (that includes harmless chat, which annoys real users). Move the threshold to trade one against the other.</p>
-      </section>
-      <section class="panel" style="margin-top:1rem">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <h2>Leaderboard</h2>
-          <button class="btn ghost small" id="reset" type="button">Reset</button>
-        </div>
-        <table class="board" id="board"></table>
-      </section>
     </section>
   </div>
+
+  <section class="panel tabbed" id="details">
+    <section class="panel" data-tab="Speed">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+        <h2>Speed</h2>
+        <button class="btn ghost small" type="button" id="speedClear">Clear</button>
+      </div>
+      <div id="speedBoard"></div>
+    </section>
+    <section class="panel" data-tab="How the guards are doing">
+      <h2>How the guards are doing</h2>
+      <table class="board" id="stats"></table>
+      <p class="small muted">A good guard catches every leak while blocking as little as possible when nothing leaked
+        (that includes harmless chat, which annoys real users). Move the threshold to trade one against the other.</p>
+    </section>
+    <section class="panel" data-tab="Leaderboard">
+      <div style="display:flex;justify-content:flex-end;align-items:baseline">
+        <h2>Leaderboard</h2>
+        <button class="btn ghost small" id="reset" type="button">Reset</button>
+      </div>
+      <table class="board" id="board"></table>
+    </section>
+  </section>
 </main>
 </body>
 </html>

@@ -359,13 +359,24 @@ function applyMode(m) {
   newCube();
 }
 
+// Players whose model isn't set up (no Jev key, no BHT key) are hidden instead of failing on the page.
+async function hideUnconfiguredPlayers() {
+  const h = await healthReady;
+  for (const name of ["jev", "llm"]) {
+    if (h[name] && h[name].configured) continue;
+    const box = document.querySelector(`#players input[value="${name}"]`);
+    if (box) { box.checked = false; box.closest("label").hidden = true; }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  await hideUnconfiguredPlayers();
   document.querySelectorAll("#viewMode button").forEach(b => b.addEventListener("click", () => setView(b.dataset.v)));
   speed = new SpeedBoard("speedBoard", { unit: "move" });
   document.getElementById("speedClear").addEventListener("click", () => speed.clear());
   const lp = logPanel("decisionLog", "Decision log",
     "Every move, newest first: who chose it, the top options with the model's probabilities, what the perfect solver says about it, and how long it took.");
-  document.getElementById("speedBoard").closest("section").after(lp.section);
+  addTab("details", "Decision log", lp.section, { first: true });
   log = new DecisionLog(lp.box, [
     { key: "cube", label: "Cube" }, { key: "who", label: "Player" }, { key: "step", label: "Move #", cls: "num" },
     { key: "move", label: "Chose" }, { key: "p", label: "P(chosen)", cls: "num" }, { key: "opts", label: "Top options", cls: "widecol" },

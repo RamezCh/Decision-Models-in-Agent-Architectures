@@ -69,11 +69,13 @@ async function loadStatus() {
     const h = await api("/api/health");
     box.replaceChildren();
     for (const [name, info] of Object.entries(h)) {
+      if (!info.configured) continue;          // only show what this setup actually uses
       let cls = "unknown", tip = "configured (reachability is checked on first call)";
       if (!info.configured) { cls = "down"; tip = name === "jev" ? "no TYPESAFE_API_KEY in .env" : "not configured"; }
       else if (info.reachable === true) { cls = "up"; tip = `reachable at ${info.base_url}`; }
       else if (info.reachable === false) { cls = "down"; tip = `cannot reach ${info.base_url}`; }
-      box.append(el("span", { title: tip }, el("i", { class: `dot ${cls}` }), MODEL_LABEL[name] || name));
+      box.append(el("span", { title: tip }, el("i", { class: `dot ${cls}` }),
+        name === "llm" ? "BHT Medium" : (MODEL_LABEL[name] || name)));
     }
     return h;
   } catch (e) {
@@ -143,11 +145,11 @@ class SpeedBoard {
   }
 
   sparkline(ms, avg, top) {
-    const W = 600, H = 80, bw = W / 60;
+    const W = 1200, H = 90, bw = W / 60;   // wide and short: stays compact on a big screen
     const y = (v) => H - (v / top) * H;
     const bars = ms.map((v, i) => `<rect x="${(i * bw + 1).toFixed(1)}" y="${y(v).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${(H - y(v)).toFixed(1)}" rx="1.5" fill="var(--c)" opacity="0.85"><title>${Math.round(v)} ms</title></rect>`).join("");
     const grid = [100, 250, 500, 1000, 2000, 5000].filter(g => g < top * 0.85).map(g =>
-      `<line x1="0" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${W - 2}" y="${y(g) - 3}" text-anchor="end" font-size="10" fill="var(--muted)">${g >= 1000 ? g / 1000 + " s" : g + " ms"}</text>`).join("");
+      `<line x1="0" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${W - 2}" y="${y(g) - 3}" text-anchor="end" font-size="15" fill="var(--muted)">${g >= 1000 ? g / 1000 + " s" : g + " ms"}</text>`).join("");
     const avgLine = `<line x1="0" x2="${W}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--ink)" stroke-dasharray="4 4"/>`;
     const wrap = el("div", { class: "speed-spark" });
     wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of the most recent response times, average ${Math.round(avg)} ms">${grid}${bars}${avgLine}</svg>`;
@@ -229,7 +231,8 @@ function rawLogLink(url) {
   return el("a", { href: url, target: "_blank", rel: "noopener", class: "small raw-link", text: "Raw log" });
 }
 
-document.addEventListener("DOMContentLoaded", loadStatus);
+let healthReady = Promise.resolve({});   // pages can await the model status
+document.addEventListener("DOMContentLoaded", () => { healthReady = loadStatus(); });
 
 // ── Decision log ──────────────────────────────────────────────────────────
 // Every decision on the page, newest first: who decided, what, with which
@@ -259,6 +262,7 @@ class DecisionLog {
     if (this.rows.length === 1) this.tbody.replaceChildren();
     this.tbody.prepend(tr);
     tr.classList.add("log-new");
+    setTimeout(() => tr.classList.remove("log-new"), 1300);   // don't replay when its tab is opened later
     if (this.tbody.children.length > this.max) this.tbody.lastChild.remove();
   }
   rowNode(r) {
@@ -364,3 +368,61 @@ function exchangePanel(ex, open = false) {
   d.open = open;
   return d;
 }
+
+// ── Tabs for the detail panels ────────────────────────────────────────────
+// <section class="panel tabbed" id="details"> holds children with data-tab="Label".
+// Pages add more with addTab(). The chosen tab is remembered per page.
+
+function tabbedHost(host) {
+  host = typeof host === "string" ? document.getElementById(host) : host;
+  if (!host._tabs) {
+    const bar = el("div", { class: "tabbar", role: "tablist" });
+    const panes = el("div", { class: "tabpanes" });
+    const initial = [...host.querySelectorAll(":scope > [data-tab]")];
+    host.prepend(bar, panes);
+    host._tabs = { bar, panes, items: [] };
+    initial.forEach(n => addTab(host, n.dataset.tab, n));
+  }
+  return host;
+}
+
+function addTab(host, label, node, { first = false } = {}) {
+  host = tabbedHost(host);
+  const t = host._tabs;
+  const key = `tab:${location.pathname}`;
+  const btn = el("button", { type: "button", role: "tab", text: label, onclick: () => selectTab(host, label) });
+  node.classList.add("tabpane");
+  if (first) { t.bar.prepend(btn); t.panes.prepend(node); t.items.unshift({ label, btn, node }); }
+  else { t.bar.append(btn); t.panes.append(node); t.items.push({ label, btn, node }); }
+  let saved = null;
+  try { saved = localStorage.getItem(key); } catch (_) {}
+  selectTab(host, t.items.some(i => i.label === saved) ? saved : t.items[0].label, false);
+}
+
+function selectTab(host, label, remember = true) {
+  for (const i of host._tabs.items) {
+    const on = i.label === label;
+    i.btn.setAttribute("aria-selected", String(on));
+    i.node.hidden = !on;
+  }
+  if (remember) try { localStorage.setItem(`tab:${location.pathname}`, label); } catch (_) {}
+}
+
+document.addEventListener("DOMContentLoaded", () => document.querySelectorAll(".tabbed").forEach(tabbedHost));
+
+// ── Overview page: each model card shows whether this setup uses it ───────
+document.addEventListener("DOMContentLoaded", async () => {
+  const box = document.getElementById("models");
+  if (!box) return;
+  const h = await healthReady;
+  for (const card of box.querySelectorAll("[data-model]")) {
+    const info = h[card.dataset.model];
+    const out = card.querySelector(".model-status");
+    if (!info) { out.textContent = ""; continue; }
+    card.classList.toggle("off", !info.configured);
+    out.textContent = !info.configured
+      ? (card.dataset.model === "jev" ? "Not set up here (no TYPESAFE_API_KEY)" : "Not set up here (no BHT_LLM_INF_API_KEY in your environment)")
+      : info.reachable === false ? `Set up, but not reachable at ${info.base_url}`
+      : `Ready · ${info.model || info.label || ""}`;
+  }
+});

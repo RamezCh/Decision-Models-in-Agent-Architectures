@@ -255,7 +255,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("speedClear").addEventListener("click", () => speed.clear());
   const lp = logPanel("decisionLog", "Decision log",
     "Every check, newest first: the calibrated risk, the decision, the answers that pushed it most, CLM's raw answer to the one big question, and (for the examples) the correct label.");
-  document.getElementById("speedBoard").closest("section").after(lp.section);
+  addTab("details", "Decision log", lp.section, { first: true });
   log = new DecisionLog(lp.box, [
     { key: "listing", label: "Listing", cls: "msgcol" }, { key: "who", label: "Model" }, { key: "risk", label: "Risk", cls: "num" },
     { key: "decision", label: "Decision" }, { key: "why", label: "Pushed it most", cls: "widecol" }, { key: "overall", label: "Raw “scam?”", cls: "num" },

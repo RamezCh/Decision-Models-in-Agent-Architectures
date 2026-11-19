@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <a class="brand" href="/">Decision <span class="c">models</span></a>
   <nav class="nav" aria-label="Demos">
     <a href="/" aria-current="page">Overview</a>
     <a href="/cube">Cube race</a>
@@ -18,52 +18,90 @@
   </nav>
   <div class="status" aria-live="polite">checking models…</div>
 </header>
-<main>
-  <h1>Two AI models that decide instead of write</h1>
-  <p class="lede">Chatbots like ChatGPT write an answer word by word. Jev and CLM never write anything:
-    you give them a situation and a multiple-choice question, and they return every option's probability
-    in one go, usually in well under a second. The cube race sends the exact same question to both models,
-    so you can compare answer, confidence and speed side by side. The scam check and the guard game run on
-    CLM-8B, the open model you can host yourself.</p>
+<main class="home">
+  <h1>Models that decide instead of write</h1>
+  <p class="lede">A chatbot writes its answer word by word. A <strong>System One</strong> model never writes: you give it a
+    situation and a few questions with fixed answers, and in one pass it returns how likely each answer is.
+    Three demos show what that's good for, where it breaks, and how it works together with a chatbot.</p>
 
-  <div class="vs">
-    <section class="lane jev">
-      <div class="lane-name">Jev</div>
-      <dl>
-        <dt>Made by</dt><dd>TypeSafe AI</dd>
-        <dt>Runs</dt><dd>As a paid online service (hosted in the US)</dd>
-        <dt>Trained for</dt><dd>Honest probabilities: “80% sure” should be right 80% of the time</dd>
-        <dt>Answers</dt><dd>Choice, score, yes/no, and image boxes</dd>
-      </dl>
-    </section>
-    <section class="lane clm">
-      <div class="lane-name">CLM-8B</div>
-      <dl>
-        <dt>Made by</dt><dd>Contrastive-LM research group (open source)</dd>
-        <dt>Runs</dt><dd>On your own GPU, free to download</dd>
-        <dt>Trained for</dt><dd>Matching a situation to the best-fitting option</dd>
-        <dt>Answers</dt><dd>Choice, score and yes/no</dd>
-      </dl>
-    </section>
+  <section class="panel s12" aria-label="System 2 versus System 1">
+    <div class="s12-row">
+      <div class="s12-tag llm">System 2 · chat LLM</div>
+      <div class="s12-flow">
+        <span class="s12-box">"I was charged twice…"</span><span class="s12-arrow">→</span>
+        <span class="s12-tokens"><i>The</i><i>customer</i><i>was</i><i>charged</i><i>…</i></span><span class="s12-arrow">→</span>
+        <span class="s12-box">text you still have to read and check</span>
+      </div>
+      <div class="s12-note">thinks step by step · seconds · can write anything</div>
+    </div>
+    <div class="s12-row">
+      <div class="s12-tag clm">System 1 · decision model</div>
+      <div class="s12-flow">
+        <span class="s12-box">situation + questions</span><span class="s12-arrow">→</span>
+        <span class="s12-box strong">one pass</span><span class="s12-arrow">→</span>
+        <span class="s12-box">refund? <b>90%</b> · team: <b>billing 85%</b></span>
+      </div>
+      <div class="s12-note">~100 ms · only the answers you allowed · can still be wrong</div>
+    </div>
+  </section>
+
+  <h2 class="home-h">The models</h2>
+  <div class="models" id="models">
+    <article class="model clm" data-model="clm">
+      <div class="model-head"><span class="lane-name">CLM-8B</span><span class="pill">System 1</span></div>
+      <p>Open model from Stanford and NVIDIA. Matches the situation against the text of each possible answer.
+        Runs on our own A100 on the BHT cluster.</p>
+      <div class="model-status small muted"></div>
+    </article>
+    <article class="model llm" data-model="llm">
+      <div class="model-head"><span class="lane-name">BHT Medium</span><span class="pill">System 2</span></div>
+      <p>Gemma 4 32B, a chat LLM on BHT's LUMIS. Plays Vaulty, reviews borderline messages for the guard and
+        can race the cube, so you see a chatbot next to the decision model.</p>
+      <div class="model-status small muted"></div>
+    </article>
+    <article class="model jev" data-model="jev">
+      <div class="model-head"><span class="lane-name">Jev</span><span class="pill">System 1</span></div>
+      <p>TypeSafe's hosted decision model, trained to give honest probabilities. Optional: it joins the
+        comparisons when an API key is set.</p>
+      <div class="model-status small muted"></div>
+    </article>
   </div>
 
-  <div class="demo-list">
-    <a class="demo-link" href="/cube">
-      <h2>Cube race</h2>
-      <p>Both models play the same scrambled Rubik's cube, one move at a time. A perfect solver referees every move.</p>
+  <h2 class="home-h">Three demos, three lessons</h2>
+  <div class="demos">
+    <a class="demo" href="/scam">
+      <div class="demo-kicker">Scam check</div>
+      <h3>How you ask matters</h3>
+      <p>Paste a Berlin flat listing. CLM answers ten small yes/no questions; plain code weighs them into a risk
+        you can explain question by question.</p>
+      <div class="demo-stat"><span class="big">0.42 → 0.97</span><span class="small muted">AUC, same model: clear yes/no
+        descriptions plus weights learned from 30 labelled listings</span></div>
     </a>
-    <a class="demo-link" href="/scam">
-      <h2>Scam check</h2>
-      <p>Paste a Berlin flat listing. CLM-8B checks nine red flags a careful flat-hunter would look for.</p>
+    <a class="demo" href="/guard">
+      <div class="demo-kicker">Beat the guard</div>
+      <h3>System 1 + System 2</h3>
+      <p>Trick Vaulty into leaking its password. CLM decides clear cases in ~100 ms; only borderline messages go
+        to the chat LLM for a careful look.</p>
+      <div class="demo-stat"><span class="big">12 of 52</span><span class="small muted">test messages needed the slow
+        model; CLM alone got the other 40 right</span></div>
     </a>
-    <a class="demo-link" href="/guard">
-      <h2>Beat the guard</h2>
-      <p>Trick the vault bot into revealing its password. CLM-8B and a plain keyword filter try to stop you.</p>
+    <a class="demo" href="/cube">
+      <div class="demo-kicker">Cube race</div>
+      <h3>Where it stops</h3>
+      <p>Every player gets the same scrambled cube; a perfect solver grades each move. Matching meanings can't
+        plan moves ahead.</p>
+      <div class="demo-stat"><span class="big">U2 × 21</span><span class="small muted">CLM picked the same move for
+        all 21 test cubes, whatever we asked</span></div>
     </a>
   </div>
 
-  <p class="small muted" style="margin-top:1.5rem">Times include the network: Jev answers from the US West Coast,
-    CLM from wherever you run it. Hover over the dots in the top bar to see each model's connection status.</p>
+  <section class="panel behind-note">
+    <h2>Look behind the scenes</h2>
+    <p>Every page shows the exact request sent to the model, the text CLM actually reads, every possible answer with
+      its probability, and a decision log you can download as CSV. Each demo also has a <strong>Recorded</strong>
+      mode that replays real runs at their real speed, in case the network fails.
+      <a href="https://github.com/RamezCh/Decision-Models-in-Agent-Architectures/blob/main/docs/README.md">How the models form their answers (docs)</a></p>
+  </section>
 </main>
 </body>
 </html>

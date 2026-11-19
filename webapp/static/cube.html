@@ -10,7 +10,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <a class="brand" href="/">Decision <span class="c">models</span></a>
   <nav class="nav" aria-label="Demos">
     <a href="/">Overview</a>
     <a href="/cube" aria-current="page">Cube race</a>
@@ -42,7 +42,7 @@
       <div class="seg" id="level" role="group" aria-label="Difficulty"></div>
     </div>
     <div class="field">Players
-      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <div id="players" style="display:flex;gap:1rem;flex-wrap:wrap">
         <label class="check"><input type="checkbox" value="jev" checked> Jev</label>
         <label class="check"><input type="checkbox" value="clm" checked> CLM-8B</label>
         <label class="check" title="A chat LLM (System 2) on BHT's LUMIS: needs BHT_LLM_INF_API_KEY in your environment. Takes seconds per move.">
@@ -85,14 +85,6 @@
 
   <div class="lanes" id="lanes"></div>
 
-  <section class="panel" style="margin-top:1rem">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
-      <h2>Speed</h2>
-      <button class="btn ghost small" type="button" id="speedClear">Clear</button>
-    </div>
-    <div id="speedBoard"></div>
-  </section>
-
   <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
     <h2 id="recSummaryTitle">All recorded cubes</h2>
     <table class="summary-table" id="recSummary"></table>
@@ -107,6 +99,16 @@
     <p class="small muted">Going down means progress. A player that reaches 0 has solved the cube.
       Note: solving needs planning several moves ahead, which is not what these one-shot decision models are built for.
       Watch how often they still pick an optimal move compared with the random mover.</p>
+  </section>
+  <section class="panel tabbed" id="details">
+  <section class="panel" data-tab="Speed">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+      <h2>Speed</h2>
+      <button class="btn ghost small" type="button" id="speedClear">Clear</button>
+    </div>
+    <div id="speedBoard"></div>
+  </section>
+
   </section>
 </main>
 </body>

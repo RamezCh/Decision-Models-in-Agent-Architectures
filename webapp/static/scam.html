@@ -10,7 +10,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/"><span class="j">Jev</span> vs <span class="c">CLM</span></a>
+  <a class="brand" href="/">Decision <span class="c">models</span></a>
   <nav class="nav" aria-label="Demos">
     <a href="/">Overview</a>
     <a href="/cube">Cube race</a>
@@ -70,12 +70,14 @@
         <p class="small muted" id="agree"></p>
         <div class="truth hidden" id="truth"></div>
       </section>
-      <section class="panel" style="margin-top:1rem">
+      <section class="panel tabbed" id="details">
+      <section class="panel" data-tab="Speed">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
           <h2>Speed</h2>
           <button class="btn ghost small" type="button" id="speedClear">Clear</button>
         </div>
         <div id="speedBoard"></div>
+      </section>
       </section>
       <section class="panel hidden" id="recSummaryPanel" style="margin-top:1rem">
         <h2 id="recSummaryTitle">All recorded listings</h2>
